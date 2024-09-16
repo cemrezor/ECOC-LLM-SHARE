@@ -1,21 +1,19 @@
 import torch
-import os
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
 )
+from transformers.cache_utils import StaticCache
 import transformers
-from transformers.cache_utils import Cache
 from peft import LoraConfig, get_peft_model
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, Union, List, Any
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import replace_return_docstrings
-from transformers import LlamaPreTrainedModel, LlamaModel, Trainer
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-import torch
+from transformers import Qwen2PreTrainedModel, Qwen2Model, AutoTokenizer, DataCollatorForLanguageModeling, Trainer
+from transformers.file_utils import add_start_docstrings_to_model_forward
 import torch.nn as nn
+import math, wandb, json
 from huggingface_hub import login
-import wandb, json
 
 print("=" * 80)
 print("All imports completed successfully")
@@ -27,23 +25,22 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Enable anomaly detection for debugging
 torch.autograd.set_detect_anomaly(True)
 
-MODEL_ID = "TinyLlama/TinyLlama_v1.1"
+MODEL_ID = "Qwen/Qwen2-1.5B"
 VOCAB_DICT_PATH = ''
 WANDB_API_KEY = ""
 WANDB_PROJECT = ""
 OUTPUT_DIR = ''
 MODEL_NAME_HF = ''
-_CONFIG_FOR_DOC = "LlamaConfig"
+_CONFIG_FOR_DOC = "Qwen2Config"
 wandb.login(key=WANDB_API_KEY)
 run = wandb.init(
     # set the wandb project where this run will be logged
     project=WANDB_PROJECT,
     config={
     "learning_rate": 2e-4,
-    "architecture": "New MTL TinyLLama-ECoC with No LoRa on ECOC, LoRA on Attention and Alpaca Dataset with Masked BCELoss and Random ECOC 50 bits, low LR, group_by_length as False, 512 hidden state, 3 epochs",
+    "architecture": "New MTL Qwen2-ECoC with No LoRa on ECOC, LoRA on Attention and Alpaca Dataset with Masked BCELoss and Random ECOC 50 bits, low LR, group_by_length as False, 512 hidden state, 3 epochs",
     "dataset": "alpaca",
     "epochs": 3,
-
     }
 )
 # Custom Loss Function
@@ -55,7 +52,7 @@ class MaskedLoss(nn.Module):
     def __init__(self, ignore_value=-1.0):
         super(MaskedLoss, self).__init__()
         self.ignore_value = ignore_value
-        self.cross_loss = nn.BCELoss(reduction='none')  # Element-wise loss
+        self.cross_loss = nn.BCELoss(reduction='none')  # Compute element-wise loss
 
     def forward(self, input, target):
         # Create a mask to ignore entire rows filled with ignore_value
@@ -65,7 +62,7 @@ class MaskedLoss(nn.Module):
         loss = self.cross_loss(input, target)
         return loss.mean() if loss.numel() > 0 else torch.tensor(0.0, device=input.device)
 
-
+    
 def check_nan_in_weights(linear_layer):
     """
     Check if the weights of a linear layer contain NaN values.
@@ -74,7 +71,6 @@ def check_nan_in_weights(linear_layer):
     if weights.device.type == 'meta':
         print("Tensor is in Meta state. Cannot check for NaN values.")
         return False
-
     nan_mask = torch.isnan(weights)
     nan_indices = torch.nonzero(nan_mask, as_tuple=True)
     has_nan = nan_indices[0].numel() > 0
@@ -93,7 +89,7 @@ def check_nan_in_logits(logits):
     if logits.device.type == 'meta':
         print("Tensor is in Meta state. Cannot check for NaN values.")
         return False
-
+    
     nan_mask = torch.isnan(logits)
     nan_indices = torch.nonzero(nan_mask, as_tuple=True)
     has_nan = nan_indices[0].numel() > 0
@@ -117,7 +113,59 @@ def load_vocab_dictionary(file_path):
 # Load vocabulary dictionary
 token_binary_map = load_vocab_dictionary(VOCAB_DICT_PATH)
 
-LLAMA_INPUTS_DOCSTRING = r"""
+def _prepare_4d_causal_attention_mask_with_cache_position(
+    attention_mask: torch.Tensor,
+    sequence_length: int,
+    target_length: int,
+    dtype: torch.dtype,
+    device: torch.device,
+    min_dtype: float,
+    cache_position: torch.Tensor,
+    batch_size: int,
+):
+    """
+    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+    `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+    Args:
+        attention_mask (`torch.Tensor`):
+            A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
+        sequence_length (`int`):
+            The sequence length being processed.
+        target_length (`int`):
+            The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
+        dtype (`torch.dtype`):
+            The dtype to use for the 4D attention mask.
+        device (`torch.device`):
+            The device to plcae the 4D attention mask on.
+        min_dtype (`float`):
+            The minimum value representable with the dtype `dtype`.
+        cache_position (`torch.Tensor`):
+            Indices depicting the position of the input sequence tokens in the sequence.
+        batch_size (`torch.Tensor`):
+            Batch size.
+    """
+    if attention_mask is not None and attention_mask.dim() == 4:
+        # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+        causal_mask = attention_mask
+    else:
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            mask_length = attention_mask.shape[-1]
+            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+            padding_mask = padding_mask == 0
+            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                padding_mask, min_dtype
+            )
+
+    return causal_mask
+
+
+QWEN2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -138,7 +186,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
@@ -190,34 +238,13 @@ LLAMA_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-LLAMA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`LlamaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
-)
-class LlamaForCausalLM(LlamaPreTrainedModel):
-    # _tied_weights_keys = ["lm_head.weight"]
+class Qwen2ForCausalLM(Qwen2PreTrainedModel):
     """
-    Custom TinyLlama model for causal language modeling with MTL-ECOC head.
+    Custom Qwen2 model for causal language modeling with MTL-ECOC head.
     """
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
+        self.model = Qwen2Model(config)
         self.vocab_size = config.vocab_size
         # self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # self.bit_size = math.ceil(math.log2(self.vocab_size))
@@ -255,7 +282,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def tie_weights(self):
         """
         Override to prevent weight tying.
-        """        
+        """   
         pass
 
     def find_closest_tensor(self, given_tensor, tensor_of_tensors):
@@ -284,14 +311,14 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             bin_tensor = torch.tensor([int(bit) for bit in bin_str])
         return bin_tensor
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(QWEN2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -305,7 +332,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         # Get decoder outputs
         outputs = self.model(
             input_ids=input_ids,
@@ -321,10 +348,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-
         # Compute MTL-ECOC logits
         logits = torch.stack([head(hidden_states) for head in self.linear_heads])
-        logits = logits.squeeze(-1)
+        logits = logits.squeeze(-1)  
         logits = logits.permute(1, 2, 0)  # Shape: [batch_size, seq_len, bit_size]
 
         # Compute loss if labels are provided
@@ -345,7 +371,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                         bin_tensor = torch.tensor(token_binary_map[str(val)])
                         binary_tensors_row.append(bin_tensor)
                 binary_tensors.append(torch.stack(binary_tensors_row))
-            binary_tensors = torch.stack(binary_tensors).to(logits.device)
+            binary_tensors = torch.stack(binary_tensors)
+            binary_tensors = binary_tensors.to(logits.device)
             loss_fct = MaskedLoss()
 
             for j in range(logits.shape[-1]):  # Loop over each classifier
@@ -376,9 +403,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         use_cache=True,
         **kwargs,
     ):
-        """
-        Prepare inputs for text generation.
-        """
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if past_key_values is not None:
             if inputs_embeds is not None:  # Exception 1
                 input_ids = input_ids[:, -cache_position.shape[0] :]
@@ -392,11 +419,36 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+            model_inputs = {"input_ids": input_ids}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if inputs_embeds is not None:
+                batch_size, sequence_length = inputs_embeds.shape
+                device = inputs_embeds.device
+            else:
+                batch_size, sequence_length = input_ids.shape
+                device = input_ids.device
+
+            dtype = self.lm_head.weight.dtype
+            min_dtype = torch.finfo(dtype).min
+
+            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
 
         model_inputs.update(
             {
@@ -409,25 +461,15 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
         return model_inputs
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
-
 try:
-    model = LlamaForCausalLM.from_pretrained(MODEL_ID, return_dict=True, load_in_8bit=False, device_map='auto')
+    model = Qwen2ForCausalLM.from_pretrained(MODEL_ID,
+                                                 return_dict=True,
+                                                 load_in_8bit=False,
+                                                 device_map='auto')
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding=False)
 
     # Clear any cached memory to optimize GPU usage
     torch.cuda.empty_cache()
-
-    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-    model.resize_token_embeddings(len(tokenizer))
 
 except Exception as e:
     print(f"Error loading model: {e}")
@@ -463,8 +505,8 @@ def print_trainable_parameters(model):
     f"all params: {all_param} || "
     f"trainable%: {100 * trainable_params / all_param}"
 )
-
-# Configure LoRA
+    
+# Configure LoRA  
 config = LoraConfig(
     r=16,
     lora_alpha=32,
@@ -478,12 +520,13 @@ print("Model loaded successfully")
 
 # Apply LoRA to the model
 model = get_peft_model(model, config)
+print(model)
 
 # Unfreeze MTL-ECOC head parameters for fine-tuning
 for param in model.linear_heads.parameters():
     param.requires_grad = True
 
-# # Unfreeze parameters where LoRA is applied (they are already set up by LoRA)
+# Unfreeze parameters where LoRA is applied (they are already set up by LoRA)
 for name, param in model.named_parameters():
     if "lora_" in name:
         param.requires_grad = True
@@ -546,10 +589,23 @@ trainer = Trainer(
         group_by_length = False,
         output_dir=OUTPUT_DIR,
         report_to=["wandb"],
+        # lr_scheduler_type = "cosine_with_restarts",
         optim = "paged_adamw_32bit",
         save_steps=2000,
     ),
     data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False)
 )
 
-OUTPUT_DIR
+# Disable caching during training
+model.config.use_cache = False
+
+# Start training
+trainer.train()
+
+# Login to Hugging Face Hub
+login(token="")
+
+# Merge and unload LoRA adapters
+trainer.model = trainer.model.merge_and_unload()
+trainer.model.save_pretrained(OUTPUT_DIR)
+trainer.model.push_to_hub(MODEL_NAME_HF, use_auth_token=True)
