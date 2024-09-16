@@ -501,7 +501,12 @@ print_trainable_parameters(model)
 print("=" * 80)
 
 print("=" * 80)
-data = load_dataset("tatsu-lab/alpaca")
+
+# Load the dataset
+data = load_dataset("disham993/alpaca-train-validation-test-split")
+
+# Merge the 'train' and 'validation' splits into one 'train' split
+data['train'] = data['train'].concatenate(data['validation'])
 
 def generate_prompt(data_point):
     if data_point["input"]:
