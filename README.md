@@ -1,6 +1,8 @@
 # ECOC-LLM
 **ECOC-LLM** (Error-Correcting Output Code based Large Language Models) is a repository that provides tools and scripts for fine-tuning, evaluating, and inferencing large language models (LLMs) integrated with Error-Correcting Output Code (ECOC) technique. This repo focuses on enabling LLMs to handle complex output spaces by leveraging ECOC, which transforms multi-class classification into binary classification tasks, improving robustness and accuracy.
 
+This repository was developed as part of an MSc Computing(AI/ML) dissertation by Harsh Agarwal at Imperial College London.
+
 ## Repository Structure
 
 The repository is organized as follows:
