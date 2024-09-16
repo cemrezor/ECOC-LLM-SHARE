@@ -4,13 +4,13 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, OPTPreTrainedModel, OPTModel
 from transformers.modeling_outputs import CausalLMOutputWithPast
+import transformers
 from typing import Optional, Tuple, Union, List
 from datasets import load_dataset
 import math
 import json
 from bert_score import score as bert_score
 from tqdm import tqdm
-
 
 MODEL_ID = "facebook/opt-1.3b"
 VOCAB_DICT_PATH = ''
@@ -51,23 +51,31 @@ class MaskedLoss(nn.Module):
         input = input[mask]
         target = target[mask]
         loss = self.cross_loss(input, target)
-        return loss.mean() if loss.numel() > 0 else torch.tensor(0.0, device=input.device)
+        if loss.numel() > 0:
+            loss = loss.mean()
+        else:
+            loss = torch.tensor(0.0, device=input.device)
+        return loss
 
 class OPTForCausalLM(OPTPreTrainedModel):
-    # _tied_weights_keys = ["lm_head.weight"]
     """
     Custom OPT model for causal language modeling with ECOC head.
     """ 
     def __init__(self, config):
         super().__init__(config)
         self.model = OPTModel(config)
-
-        # the lm_head weight is automatically tied to the embed tokens weight
-        # self.lm_head = nn.Linear(config.word_embed_proj_dim, config.vocab_size, bias=False)
+        # self.bit_size = math.ceil(math.log2(config.vocab_size))
         self.bit_size = 16
-        self.ecoc_head = nn.Linear(config.word_embed_proj_dim, self.bit_size, bias=False)
-        self.ecoc_activation = nn.Sigmoid()
-        # Initialize weights and apply final processing
+        self.linear_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(config.word_embed_proj_dim, 1024, bias=False),  # First linear layer
+                nn.ReLU(),  # Activation function
+                nn.Linear(1024, 1, bias=False),  # Second linear layer, outputting a single logit
+                nn.Sigmoid()  # Sigmoid activation to convert logits to probabilities (0 or 1)
+            )
+            for _ in range(self.bit_size)
+        ])
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -77,10 +85,10 @@ class OPTForCausalLM(OPTPreTrainedModel):
         self.model.decoder.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.ecoc_head
+        return self.linear_heads
 
     def set_output_embeddings(self, new_embeddings):
-        self.ecoc_head = new_embeddings
+        self.linear_heads = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.decoder = decoder
@@ -121,7 +129,6 @@ class OPTForCausalLM(OPTPreTrainedModel):
             bin_tensor = torch.tensor([int(bit) for bit in bin_str])
         return bin_tensor
 
-    # @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -141,7 +148,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Get decoder outputs
+         # Get decoder outputs
         outputs = self.model.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -153,14 +160,15 @@ class OPTForCausalLM(OPTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        hidden_states = outputs[0]
         # Compute ECOC logits
-        logits = self.ecoc_activation(self.ecoc_head(outputs[0]).contiguous())
+        logits = torch.stack([head(hidden_states) for head in self.linear_heads])
+        logits = logits.squeeze(-1)
+        logits = logits.permute(1, 2, 0)
 
         loss = torch.tensor(0.0).to(logits.device)
         if labels is not None:
             labels = labels.to(logits.device)
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
 
@@ -169,7 +177,6 @@ class OPTForCausalLM(OPTPreTrainedModel):
                 binary_tensors_row = []
                 for j in range(shift_labels.shape[1]):
                     val = shift_labels[i, j].item()
-                    # print(val)
                     if val==-100:
                         binary_tensors_row.append(torch.full((self.bit_size,), -1))
                     else:
@@ -183,7 +190,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
             for j in range(logits.shape[-1]):  # Loop over each classifier
                 # Compute loss for the j-th node in the final layer
                 node_loss = loss_fct(shift_logits[:,:, j].float(), binary_tensors[:,:, j].float())
-                # print(shift_logits[:,:, j].shape)
+
                 loss += node_loss
 
         if not return_dict:
@@ -246,17 +253,20 @@ data = load_dataset("disham993/alpaca-train-validation-test-split")
 
 def generate_prompt(data_point):
     if data_point["input"]:
-        return f""" ### Instruction:
+        return f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+### Instruction:
 {data_point["instruction"]}
 ### Input:
 {data_point["input"]}
 ### Response:
 """
     else:
-        return f""" ### Instruction:
+        return f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
+### Instruction:
 {data_point["instruction"]}
 ### Response:
 """
+    
 def int_to_bin_tensor(val, bit_size):
     if val==-100:
         length = bit_size
@@ -288,7 +298,7 @@ def convert_vocabulary_to_binary(tokenizer):
 
 binary_vocab = convert_vocabulary_to_binary(tokenizer)
 
-max_length = 30
+max_length = 80
 def generate_predictions(data_split):
     predictions = []
     for data_point in tqdm(data_split, desc="Generating Predictions"):
@@ -301,10 +311,10 @@ def generate_predictions(data_split):
             with torch.no_grad():
                 outputs = model(**model_inputs, return_dict=True)
             next_token_logits = outputs.logits[:, -1, :]
-            next_token = model.find_closest_tensor(next_token_logits.to(next_token_logits.device), tensor_list.to(next_token_logits.device))
-            binary_string = ''.join(str(int(bit)) for bit in next_token[0])
-            next_token_id = torch.tensor(token_binary_map[binary_string]).to(model.device)
-            # next_token_id = torch.tensor(bin_tensor_to_int(next_token[0])).to(model.device)
+            next_token = model.find_closest_tensor(next_token_logits.to(next_token_logits.device), binary_vocab.to(next_token_logits.device))
+            # binary_string = ''.join(str(int(bit)) for bit in next_token[0])
+            # next_token_id = torch.tensor(token_binary_map[binary_string]).to(model.device)
+            next_token_id = torch.tensor(bin_tensor_to_int(next_token[0])).to(model.device)
             generated_ids.append(next_token_id.unsqueeze(0).unsqueeze(0))
             # Stop generation if end-of-sequence token is generated (optional)
             if next_token_id == tokenizer.eos_token_id:
@@ -325,4 +335,4 @@ def calculate_bertscore(predictions, references):
 # Calculate BERTScore for test sets
 validation_precision, validation_recall, validation_f1 = calculate_bertscore(validation_predictions, validation_references)
 
-print(f"Validation BERTScore for Minimal ECOC OPT - Precision: {validation_precision:.4f}, Recall: {validation_recall:.4f}, F1: {validation_f1:.4f}")
+print(f"Validation BERTScore for Minimal MTL ECOC OPT (16, 1024) - Precision: {validation_precision:.4f}, Recall: {validation_recall:.4f}, F1: {validation_f1:.4f}")

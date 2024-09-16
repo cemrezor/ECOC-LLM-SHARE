@@ -556,5 +556,3 @@ trainer = Trainer(
     ),
     data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False)
 )
-
-OUTPUT_DIR
