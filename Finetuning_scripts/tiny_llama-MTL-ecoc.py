@@ -210,6 +210,7 @@ LLAMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
+# Slightly modified from transformers/src/transformers/models/llama/modeling_llama.py
 class LlamaForCausalLM(LlamaPreTrainedModel):
     # _tied_weights_keys = ["lm_head.weight"]
     """

@@ -120,7 +120,7 @@ def load_vocab_dictionary(file_path):
 # Load vocabulary dictionary
 token_binary_map = load_vocab_dictionary(VOCAB_DICT_PATH)
 
-
+# Slightly modified from transformers/src/transformers/models/opt/modeling_opt.py
 class OPTForCausalLM(OPTPreTrainedModel):
     """
     Custom OPT model for causal language modeling with ECOC head.

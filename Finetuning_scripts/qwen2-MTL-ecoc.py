@@ -238,6 +238,7 @@ QWEN2_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
+# Slightly modified from transformers/src/transformers/models/qwen2/modeling_qwen2.py
 class Qwen2ForCausalLM(Qwen2PreTrainedModel):
     """
     Custom Qwen2 model for causal language modeling with MTL-ECOC head.
