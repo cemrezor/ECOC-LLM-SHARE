@@ -99,7 +99,7 @@ class GPT2(nn.Module):
     else:
       logits = logits[..., :-1, :].contiguous()
       loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets[..., 1:].contiguous().view(-1), ignore_index=50256)
-    return logits, loss
+    return logits, loss 
 
   def generate(self, idx, max_tokens, temperature=1.0, top_k=None):
     # idx is (B, T)

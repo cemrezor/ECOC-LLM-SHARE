@@ -4,6 +4,8 @@ import math
 import os
 import sys
 
+from evaluator import *
+
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
@@ -19,10 +21,12 @@ class Trainer:
         self.device = device
         self.wandb_run = wandb_run
 
-    def validate(self, step, eval_steps=50):
+    def validate(self, step, eval_steps=50, top_k=5):
         self.model.eval()
         total_loss = 0
         steps = 0
+        top_k_correct = 0
+        total_tokens = 0
 
         with torch.no_grad():
             for batch in self.val_data:
@@ -35,24 +39,32 @@ class Trainer:
                     truncation=True
                 ).to(self.device)
 
-                _, loss = self.model(tokens, tokens)
-
+                logits, loss = self.model(tokens, tokens)
                 total_loss += loss.item()
                 steps += 1
 
-        avg_loss = total_loss / steps
-        perplexity = math.exp(avg_loss) if avg_loss < 100 else float('inf') 
+                top_k_correct += calculate_top_k_accuracy(logits, tokens, k=top_k)
+                total_tokens += tokens.numel()
 
-        logger.info(f"Step {step}: Validation Loss: {avg_loss:.4f}, Perplexity: {perplexity:.4f}")
+        avg_loss = total_loss / steps
+        perplexity = calculate_perplexity(avg_loss)
+        top_k_accuracy = top_k_correct / total_tokens
+
+        logger.info(
+            f"Step {step}: Validation Loss: {avg_loss:.4f}, Perplexity: {perplexity:.4f}, "
+            f"Top-{top_k} Accuracy: {top_k_accuracy:.4f}"
+        )
 
         if self.wandb_run:
             self.wandb_run.log({
                 "step": step,
                 "val_loss": avg_loss,
-                "perplexity": perplexity
+                "perplexity": perplexity,
+                f"top_{top_k}_accuracy": top_k_accuracy
             })
 
-        return {"val_loss": avg_loss, "perplexity": perplexity}
+        return {"val_loss": avg_loss, "perplexity": perplexity, f"top_{top_k}_accuracy": top_k_accuracy}
+
     
 
     def train_one_epoch(self, epoch, eval_interval=200, eval_steps=50):
