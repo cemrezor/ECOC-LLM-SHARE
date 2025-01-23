@@ -10,8 +10,8 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 class Trainer:
-    def __init__(self, config, model, optimizer, train_data, val_data, encoder, scheduler=None, wandb_run=None, device="cuda"):
-        self.config = config
+    def __init__(self, model_config, model, optimizer, train_data, val_data, encoder, scheduler=None, wandb_run=None, device="cuda"):
+        self.model_config = model_config
         self.model = model.to(device)
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -25,8 +25,8 @@ class Trainer:
         self.model.eval()
         total_loss = 0
         steps = 0
-        top_k_correct = 0
-        total_tokens = 0
+        total_top_k_accuracy = 0
+        total_batches = 0
 
         with torch.no_grad():
             for batch in self.val_data:
@@ -34,25 +34,28 @@ class Trainer:
                     break
                 tokens = self.encoder(
                     batch, 
-                    max_length=self.config.block_size, 
+                    max_length=self.model_config.block_size, 
                     padding="max_length", 
                     truncation=True
                 ).to(self.device)
 
-                logits, loss = self.model(tokens, tokens)
+                logits, aligned_targets, loss = self.model(tokens, tokens)
                 total_loss += loss.item()
                 steps += 1
 
-                top_k_correct += calculate_top_k_accuracy(logits, tokens, k=top_k)
-                total_tokens += tokens.numel()
+                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, k=top_k)
+                total_top_k_accuracy += batch_top_k_accuracy
+                total_batches += 1
+
+                logger.info(f"Step {step}, Batch {steps}: Batch Top-{top_k} Accuracy: {batch_top_k_accuracy:.4f}")
 
         avg_loss = total_loss / steps
         perplexity = calculate_perplexity(avg_loss)
-        top_k_accuracy = top_k_correct / total_tokens
+        avg_top_k_accuracy = total_top_k_accuracy / total_batches
 
         logger.info(
             f"Step {step}: Validation Loss: {avg_loss:.4f}, Perplexity: {perplexity:.4f}, "
-            f"Top-{top_k} Accuracy: {top_k_accuracy:.4f}"
+            f"Average Top-{top_k} Accuracy: {avg_top_k_accuracy:.4f}"
         )
 
         if self.wandb_run:
@@ -60,14 +63,16 @@ class Trainer:
                 "step": step,
                 "val_loss": avg_loss,
                 "perplexity": perplexity,
-                f"top_{top_k}_accuracy": top_k_accuracy
+                f"avg_top_{top_k}_accuracy": avg_top_k_accuracy
             })
 
-        return {"val_loss": avg_loss, "perplexity": perplexity, f"top_{top_k}_accuracy": top_k_accuracy}
+        return {"val_loss": avg_loss, "perplexity": perplexity, f"avg_top_{top_k}_accuracy": avg_top_k_accuracy}
 
-    
 
     def train_one_epoch(self, epoch, eval_interval=200, eval_steps=50):
+        eval_interval = self.model_config["eval_interval"]
+        eval_steps = self.model_config["eval_steps"]
+        
         self.model.train()
         total_loss = 0
         steps = 0
@@ -75,12 +80,12 @@ class Trainer:
         for batch in self.train_data:
             tokens = self.encoder(
                 batch, 
-                max_length=self.config.block_size, 
+                max_length=self.model_config.block_size, 
                 padding="max_length", 
                 truncation=True
             ).to(self.device)
         
-            _, loss = self.model(tokens, tokens)
+            _, _, loss = self.model(tokens, tokens)
 
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -117,19 +122,18 @@ class Trainer:
 
         return {"train_loss": avg_loss}
 
-    def save_checkpoint(self, run_name):
-        os.makedirs(self.config['checkpoints']['location'], exist_ok=True)
-        checkpoint_path = f"{self.config['checkpoints']['location']}/{run_name}.bin"
-        self.model.save(checkpoint_path)
-        logger.info(f"Checkpoint saved at {checkpoint_path}")
+    def save_checkpoint(self, checkpoint_path, run_name, epoch):
+        os.makedirs(checkpoint_path, exist_ok=True)
+        model_save_path = f"{checkpoint_path}/{run_name}-epoch-{epoch}.bin"
+        self.model.save(model_save_path)
+        logger.info(f"Checkpoint saved at {model_save_path}")
 
-    def train(self, eval_interval=200, eval_steps=50):
-        for epoch in range(1, self.config.epochs + 1):
-            logger.info(f"Starting Epoch {epoch}/{self.config.epochs}")
-            self.train_one_epoch(epoch, eval_interval=eval_interval, eval_steps=eval_steps)
+    def train(self, checkpoint_path, run_name):
+        for epoch in range(1, self.model_config.epochs + 1):
+            logger.info(f"Starting Epoch {epoch}/{self.model_config.epochs}")
+            self.train_one_epoch(epoch)
 
-            run_name = f"training-{self.config['model_name']}-epoch-{epoch}"
-            self.save_checkpoint(run_name)
+            self.save_checkpoint(checkpoint_path, run_name, epoch)
 
         if self.wandb_run:
             self.wandb_run.finish()

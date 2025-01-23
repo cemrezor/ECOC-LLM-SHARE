@@ -67,7 +67,7 @@ def main():
     wandb_run = initialize_wandb(model_config, run_name)
 
     trainer = Trainer(
-        config=model_config,
+        model_config=model_config,
         model=model,
         optimizer=optim,
         train_data=train_data,
@@ -77,10 +77,7 @@ def main():
         device=device
     )
 
-    trainer.train(
-        eval_interval=model_config["eval_interval"],
-        eval_steps=model_config["eval_steps"]
-    )
+    trainer.train(checkpoint_path=f"{config['checkpoints']['location']}", run_name=run_name)
 
     logger.info("Training completed successfully.")
 
