@@ -12,8 +12,7 @@ configdict= {
         "eval_interval": 200,
         "eval_steps": 50,
         "n": 1200000,
-        "k": 7999,
-        "vocab_size": 8000,
+        "vocab_size": 8000
     },
     "gpt-15M":{
         "batch_size": 64,
@@ -28,8 +27,7 @@ configdict= {
         "eval_interval": 200,
         "eval_steps": 50,
         "n": 1200000,
-        "k": 1999,
-        "vocab_size": 3000,
+        "vocab_size": 3000
     },
     "gpt-30M": {
         "batch_size": 64,
@@ -44,8 +42,7 @@ configdict= {
         "eval_interval": 200,
         "eval_steps": 50,
         "n": 1200000,
-        "k": 1999,
-        "vocab_size": 3000,
+        "vocab_size": 3000
     },
      "tokenizer":{
         "name": "EleutherAI/gpt-neo-125M",

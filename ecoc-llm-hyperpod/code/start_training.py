@@ -53,7 +53,7 @@ def main():
     )
     tokenizer = Tokenizer(
         config["tokenizer"],
-        k=model_config["k"],
+        k=model_config["vocab_size"] - 1,
         file_path="tokens.json",
         device=device
     )
