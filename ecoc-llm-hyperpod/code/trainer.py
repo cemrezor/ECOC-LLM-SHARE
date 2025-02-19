@@ -30,6 +30,9 @@ class Trainer:
 
         with torch.no_grad():
             for batch in self.val_data:
+                
+                #logger.info("[TMP] batch is : %s ", batch)
+                
                 if steps >= eval_steps:
                     break
                 tokens = self.encoder(
@@ -38,19 +41,36 @@ class Trainer:
                     padding="max_length", 
                     truncation=True
                 ).to(self.device)
+                
+                #logger.info("[TMP] tokens is : %s ", tokens)
 
                 logits, aligned_targets, loss = self.model(tokens, tokens)
-                total_loss += loss.item()
-                steps += 1
 
-                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, k=top_k)
+                # logger.info("[TMP] logits is : %s ", logits)
+                # logger.info(f"[TMP] logits.shape: {logits.shape}")
+                
+                # logger.info("[TMP] aligned_targets is : %s ", aligned_targets)     
+                # logger.info(f"[TMP]  aligned_targets.shape: {aligned_targets.shape}")
+
+                total_loss += loss.item()
+                # logger.info(f"[TMP] loss value: {loss.item()}")  
+
+                # decoded_tokens = self.model.decode_ecoc_predictions_from_logits(logits)
+                # target_tokens = self.model.ecoc_to_token_ids_3d(aligned_targets)  
+                
+                # for i in range(logits.shape[0]):  # Show 3 sequences
+                #     logger.info(f"[TMP] True Tokens:      {target_tokens[i].tolist()}")
+                #     logger.info(f"[TMP] Predicted Tokens:{decoded_tokens[i].tolist()}")
+
+                steps += 1                
+                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, self.model, k=top_k)
                 total_top_k_accuracy += batch_top_k_accuracy
                 total_batches += 1
 
                 logger.info(f"Step {step}, Batch {steps}: Batch Top-{top_k} Accuracy: {batch_top_k_accuracy:.4f}")
 
         avg_loss = total_loss / steps
-        perplexity = calculate_perplexity(avg_loss)
+        perplexity = 1#calculate_perplexity(avg_loss)
         avg_top_k_accuracy = total_top_k_accuracy / total_batches
 
         logger.info(

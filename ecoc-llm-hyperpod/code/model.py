@@ -96,6 +96,7 @@ class GPT2(nn.Module):
 
     if targets is None:
       loss = None
+      aligned_targets = None
     else:
       logits = logits[..., :-1, :].contiguous()
       aligned_targets = targets[..., 1:].contiguous()
@@ -106,7 +107,7 @@ class GPT2(nn.Module):
     # idx is (B, T)
     for _ in range(max_tokens):
       idx_cond = idx[:, -self.block_size:]
-      logits, _ = self(idx_cond) # (B, T, C)
+      logits, _, _ = self(idx_cond) # (B, T, C)
       logits = logits[:, -1, :]  / temperature # (B, C)
       if top_k is not None:
         v, _ = torch.topk(logits, min(top_k, logits.size(-1)))

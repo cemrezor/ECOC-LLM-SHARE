@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import json
+import numpy as np
 
 class Head(nn.Module):
   def __init__(self, config, head_size):
@@ -67,8 +69,9 @@ class Block(nn.Module):
   
 
 class EcocGPT2(nn.Module):
-  def __init__(self, config, ecoc_bits, token_to_ecoc_map, device='cpu'):
+  def __init__(self, config, device='cpu'):
         super().__init__()
+        self.config = config 
         self.device = device
         self.block_size = config.block_size
         self.embedings = nn.Embedding(config.vocab_size, config.n_embed)
@@ -78,15 +81,60 @@ class EcocGPT2(nn.Module):
         self.ln_final = nn.LayerNorm(config.n_embed)
 
         # [ECOC specific change]
+        token_to_ecoc_map, ecoc_bits = self.generate_ecoc_codewords(config.vocab_size)
         self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
-        self.token_to_ecoc_map = token_to_ecoc_map
+        
+        # [TODO] opmized to retrieve torch tensor for ecoc inde. Check this later !!!!
+        self.ecoc_target_tensor = torch.tensor(
+            [token_to_ecoc_map[token] for token in range(config.vocab_size)], dtype=torch.float32
+        ).to(self.device)
 
+
+  def token_id_to_ecoc(self, token_id):
+    return self.ecoc_target_tensor[token_id]
+
+  def ecoc_to_token_ids_3d(self, targets):   
+    batch_size, seq_length, _ = targets.shape
+    tokens = torch.zeros((batch_size, seq_length), dtype=torch.long, device=targets.device)
+
+    for i in range(batch_size):
+      for j in range(seq_length):
+        vec = targets[i, j] 
+        exact_matches = (self.ecoc_target_tensor == vec).all(dim=1)
+        if exact_matches.any():
+          token_id = torch.nonzero(exact_matches, as_tuple=True)[0].item()
+          tokens[i, j] = token_id
+        else:
+          raise ValueError("Non existing ecoc code !!!")
+    return tokens
+
+
+  def generate_ecoc_codewords(self, vocab_size, r=0, seed=42):
+    np.random.seed(seed)
+    log2_v = int(np.ceil(np.log2(vocab_size))) 
+    ecoc_bits = log2_v + r
+
+    binary_codes = [format(i, f'0{log2_v}b') for i in range(vocab_size)]
+    binary_matrix = np.array([[int(bit) for bit in code] for code in binary_codes])
+
+    if r > 0:
+        random_bits = np.random.randint(0, 2, (vocab_size, r))  
+        binary_matrix = np.hstack((binary_matrix, random_bits))
+    token_to_ecoc_map = {i: binary_matrix[i] for i in range(vocab_size)}
+
+    return token_to_ecoc_map, ecoc_bits 
+   
 
   def get_parameters(self):
     return sum(p.numel() for p in self.parameters())
 
   def save(self, path):
-    torch.save(self.state_dict(), path)
+      checkpoint = {
+            "model_state_dict": self.state_dict(),
+            "config": vars(self.config)
+        }
+
+      torch.save(checkpoint, path)
 
   def forward(self, idx, targets=None):
     B, T = idx.shape
@@ -97,64 +145,76 @@ class EcocGPT2(nn.Module):
     x = self.blocks(x) # (B, T, C)
     x = self.ln_final(x) # (B, T, C)
     
-    logits = self.ecoc_head(x)  # (B, T, vocab_size)
+    logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
 
     if targets is None:
         aligned_targets = None
         loss = None
     else:
-        aligned_targets = torch.stack([torch.tensor(self.token_to_ecoc_map[token.item()]) for token in targets.view(-1)])
-        aligned_targets = aligned_targets.view(B, T, -1).to(self.device)
-
+        logits = logits[:, :-1, :] 
+        shifted_targets = targets[:, 1:]
+        aligned_targets = self.ecoc_target_tensor[shifted_targets].contiguous()
+        
         loss = F.binary_cross_entropy_with_logits(logits, aligned_targets.float())
 
     return logits, aligned_targets, loss
 
 
-def decode_ecoc_predictions(ecoc_outputs, token_to_ecoc):
-    pred_codes = (ecoc_outputs > 0.5).int() 
-    pred_tokens = []
 
-    token_ids = list(token_to_ecoc.keys())
-    ecoc_matrix = torch.stack([torch.tensor(token_to_ecoc[token]) for token in token_ids]).to(ecoc_outputs.device)
+  # def decode_ecoc_predictions_from_logits(self, ecoc_logits, cutoff=0.5):
 
-    for batch in pred_codes:  
-        batch_tokens = []
-        for pred in batch:
-            distances = torch.sum((ecoc_matrix - pred) ** 2, dim=1)  
-            closest_token = token_ids[torch.argmin(distances).item()] 
-            batch_tokens.append(closest_token)
-        pred_tokens.append(batch_tokens)
+  #     probabilities = torch.sigmoid(ecoc_logits)
+  #     pred_ecoc_codes = (probabilities > cutoff).int().detach().cpu().numpy()
 
-    return torch.tensor(pred_tokens, device=ecoc_outputs.device)
+  #     batch_size, seq_length, _ = pred_ecoc_codes.shape
+  #     pred_tokens = torch.zeros((batch_size, seq_length), dtype=torch.long, device=self.device)  # Output tensor
 
+  #     for i in range(batch_size):
+  #       for j in range(seq_length):
+  #          pred_bit_vector = pred_ecoc_codes[i, j]
+  #          distances = torch.sum((self.ecoc_target_tensor - pred_bit_vector) ** 2, dim=1) 
 
-def generate(self, idx, max_tokens, temperature=1.0, top_k=None):
-  
-  for _ in range(max_tokens):
-    idx_cond = idx[:, -self.block_size:] 
-    logits, _, _ = self(idx_cond) 
+  #          closest_token = torch.argmin(distances).item() 
+  #          pred_tokens[i, j] = closest_token
 
-    logits = logits[:, -1, :]
-    logits = logits / temperature  
+  #     return torch.tensor(pred_tokens, device=self.device)
 
-    decoded_tokens = decode_ecoc_predictions(logits, self.token_to_ecoc)
-    idx_next = decoded_tokens.unsqueeze(-1)  
+  def decode_ecoc_predictions_topk_from_logits(self, ecoc_logits, threshold=0.5, top_k=1):
+      batch_size, sequence_length, ecoc_bits = ecoc_logits.shape
 
-    idx = torch.cat((idx, idx_next), dim=1)
-    
-  return idx
+      probabilities = torch.sigmoid(ecoc_logits)
+      predicted_bits = (probabilities > threshold).int()
 
+      predicted_bits_float = predicted_bits.view(batch_size * sequence_length, ecoc_bits).float()
+      
+      target_tensor_float = self.ecoc_target_tensor.float()
+      expanded_predicted_bits = predicted_bits_float.unsqueeze(1)
+      expanded_target_tensor = target_tensor_float.unsqueeze(0)
 
-  # def next_token(self, idx, temperature=1.0, top_k: int = 1):
-  #   # idx is (B, T)
-  #   idx_cond = idx[:, -self.block_size:]
-  #   logits, _, _ = self(idx_cond) # (B, T, C)
-  #   logits = logits[:, -1, :]  / temperature # (B, C)
+      diffs = (expanded_predicted_bits - expanded_target_tensor) ** 2
+      distances = diffs.sum(dim=-1)
 
-  #   v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-  #   logits[logits < v[:, [-1]]] = -float('Inf')
+      neg_distances = -distances
+      top_k_indices = torch.topk(neg_distances, k=top_k, dim=1).indices
+      top_k_tokens = top_k_indices.view(batch_size, sequence_length, top_k)
 
-  #   probs = F.softmax(logits, dim=-1) # Softmax Independently for C dim
-  #   next_top_k_tokens = torch.multinomial(probs, num_samples=top_k) # (B, top_k)
-  #   return next_top_k_tokens
+      return top_k_tokens
+
+  def generate(self, idx, max_tokens, temperature=1.0, top_k=None):
+      pass 
+      # for _ in range(max_tokens):
+      #   idx_cond = idx[:, -self.block_size:] 
+      #   logits, _, _ = self(idx_cond) 
+
+      #   logits = logits[:, -1, :]
+      #   logits = logits / temperature  
+
+      #   if top_k is not None:
+      #         v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+      #         logits[logits < v[:, [-1]]] = -float("Inf")
+
+      #   decoded_tokens = self.decode_ecoc_predictions(logits)
+      #   idx_next = decoded_tokens.unsqueeze(-1) 
+
+      #   idx = torch.cat((idx, idx_next), dim=1)   
+      # return idx
