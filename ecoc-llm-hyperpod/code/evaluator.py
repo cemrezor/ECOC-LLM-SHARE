@@ -9,7 +9,6 @@ def calculate_top_k_accuracy(logits, aligned_targets, model, k=5):
     if hasattr(model, "ecoc_head"):
         top_k_tokens = model.decode_ecoc_predictions_topk_from_logits(
             ecoc_logits=logits,
-            threshold=0.5,
             top_k=k
         )
         gt_tokens = model.ecoc_to_token_ids_3d(aligned_targets)

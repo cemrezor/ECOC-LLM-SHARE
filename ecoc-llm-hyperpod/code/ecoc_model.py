@@ -145,7 +145,9 @@ class EcocGPT2(nn.Module):
     x = self.blocks(x) # (B, T, C)
     x = self.ln_final(x) # (B, T, C)
     
+    # t = 0
     logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
+    # t 1 
 
     if targets is None:
         aligned_targets = None
@@ -155,7 +157,12 @@ class EcocGPT2(nn.Module):
         shifted_targets = targets[:, 1:]
         aligned_targets = self.ecoc_target_tensor[shifted_targets].contiguous()
         
+        # 1. Is this summing this up ? or individually ?
+        # logits = (2, 256, 12)
+        # align target = (2, 256, 12)
         loss = F.binary_cross_entropy_with_logits(logits, aligned_targets.float())
+
+        # t 2
 
     return logits, aligned_targets, loss
 
@@ -179,23 +186,23 @@ class EcocGPT2(nn.Module):
 
   #     return torch.tensor(pred_tokens, device=self.device)
 
-  def decode_ecoc_predictions_topk_from_logits(self, ecoc_logits, threshold=0.5, top_k=1):
+  def decode_ecoc_predictions_topk_from_logits(self, ecoc_logits, top_k=1):
       batch_size, sequence_length, ecoc_bits = ecoc_logits.shape
 
       probabilities = torch.sigmoid(ecoc_logits)
-      predicted_bits = (probabilities > threshold).int()
-
-      predicted_bits_float = predicted_bits.view(batch_size * sequence_length, ecoc_bits).float()
+      
+      probabilities_2d = probabilities.view(batch_size * sequence_length, ecoc_bits).float()
       
       target_tensor_float = self.ecoc_target_tensor.float()
-      expanded_predicted_bits = predicted_bits_float.unsqueeze(1)
-      expanded_target_tensor = target_tensor_float.unsqueeze(0)
+      expanded_probs = probabilities_2d.unsqueeze(1)
+      expanded_targets = target_tensor_float.unsqueeze(0)
 
-      diffs = (expanded_predicted_bits - expanded_target_tensor) ** 2
+      diffs = (expanded_probs - expanded_targets) ** 2
       distances = diffs.sum(dim=-1)
 
       neg_distances = -distances
       top_k_indices = torch.topk(neg_distances, k=top_k, dim=1).indices
+
       top_k_tokens = top_k_indices.view(batch_size, sequence_length, top_k)
 
       return top_k_tokens
