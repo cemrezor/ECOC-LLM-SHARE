@@ -5,7 +5,7 @@
 #SBATCH --job-name=gpt-training         # Job name
 #SBATCH --output=/fsx/ubuntu/ecoc-llm-env/logs/train_%j.log           # Standard output and error log (%j expands to jobID)
 #SBATCH --error=/fsx/ubuntu/ecoc-llm-env/logs/train_%j.log            # Standard error log
-#SBATCH --time=4:00:00                  # Run time limit (hh:mm:ss)
+#SBATCH --time=24:00:00                  # Run time limit (hh:mm:ss)
 #SBATCH --ntasks=1                      # Number of tasks
 #SBATCH --cpus-per-task=4               # Number of CPU cores per task
 #SBATCH --mem=16G                       # Total memory required

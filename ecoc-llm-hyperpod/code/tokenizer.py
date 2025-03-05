@@ -51,6 +51,6 @@ class Tokenizer:
     if self.k:
       tokens = torch.tensor([[self.reversed_top_k_tokens_dict[token.item()] for token in row] for row in tokens], device=tokens.device)
     
-    output = [self.tokenizer.decode(x, skip_special_tokens=True) for x in tokens]
+    output = [self.tokenizer.decode(x, skip_special_tokens=False) for x in tokens]
 
     return output

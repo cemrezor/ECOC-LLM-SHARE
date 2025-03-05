@@ -3,7 +3,7 @@ import logging
 import math
 import os
 import sys
-
+#import time
 from evaluator import *
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -108,8 +108,20 @@ class Trainer:
             _, _, loss = self.model(tokens, tokens)
 
             self.optimizer.zero_grad(set_to_none=True)
+            
+            # t = 5
+            #start_t5 = time.process_time()
+            
             loss.backward()
+            
+            # start_6 = time.process_time()
+            
+            #print("Time taken between t=5 to t=6", start_6 - start_t5)
+            # t = 6
             self.optimizer.step()
+            
+            #print("Time taken between t=6 to t=7", time.process_time() - start_t5)
+            # t = 7
 
             if self.scheduler:
                 self.scheduler.step()

@@ -7,7 +7,7 @@ def calculate_perplexity(avg_loss):
 def calculate_top_k_accuracy(logits, aligned_targets, model, k=5):
 
     if hasattr(model, "ecoc_head"):
-        top_k_tokens = model.decode_ecoc_predictions_topk_from_logits(
+        top_k_tokens = model.ecoc_logits_to_topk_tokens_3d(
             ecoc_logits=logits,
             top_k=k
         )
