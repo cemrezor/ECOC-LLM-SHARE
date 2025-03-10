@@ -10,7 +10,7 @@ class MinimalEcocGPT2(GPT2Base):
   def __init__(self, config, device='cpu'):
         super().__init__(config, device=device)
         
-        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size)
+        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size, config.r)
         
         self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
         
@@ -33,7 +33,7 @@ class MinimalEcocGPT2(GPT2Base):
         random_bits = np.random.randint(0, 2, (vocab_size, r))  
         binary_matrix = np.hstack((binary_matrix, random_bits))
     token_to_ecoc_map = {i: binary_matrix[i] for i in range(vocab_size)}
-
+    
     return token_to_ecoc_map, ecoc_bits 
 
   def forward(self, idx, targets=None):
