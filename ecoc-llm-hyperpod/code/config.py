@@ -13,10 +13,10 @@ configdict= {
         "eval_steps": 50,
         "n": 1200000,
         "vocab_size": 8000, 
-        "r": 50
+        "r": 38
     },
     "gpt-15M":{
-        "batch_size": 32,
+        "batch_size": 64,
         "block_size": 256,
         "max_pos_n_embed": 2048,
         "lr": 2e-3,
@@ -29,7 +29,7 @@ configdict= {
         "eval_steps": 50,
         "n": 1200000,
         "vocab_size": 3000, 
-        "r": 50
+        "r": 38
     },
     "gpt-30M": {
         "batch_size": 64,
@@ -45,7 +45,7 @@ configdict= {
         "eval_steps": 50,
         "n": 1200000,
         "vocab_size": 3000, 
-        "r": 50
+        "r": 38
     },
      "tokenizer":{
         "name": "EleutherAI/gpt-neo-125M",
