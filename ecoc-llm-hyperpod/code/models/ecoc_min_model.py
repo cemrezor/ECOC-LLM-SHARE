@@ -10,7 +10,7 @@ class MinimalEcocGPT2(GPT2Base):
   def __init__(self, config, device='cpu'):
         super().__init__(config, device=device)
         
-        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size)
+        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size, config.r)
         
         self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
         
@@ -33,7 +33,7 @@ class MinimalEcocGPT2(GPT2Base):
         random_bits = np.random.randint(0, 2, (vocab_size, r))  
         binary_matrix = np.hstack((binary_matrix, random_bits))
     token_to_ecoc_map = {i: binary_matrix[i] for i in range(vocab_size)}
-
+    
     return token_to_ecoc_map, ecoc_bits 
 
   def forward(self, idx, targets=None):
@@ -72,8 +72,15 @@ class MinimalEcocGPT2(GPT2Base):
       expanded_probs = probabilities_2d.unsqueeze(1)
       expanded_targets = target_tensor_float.unsqueeze(0)
 
-      diffs = (expanded_probs - expanded_targets) ** 2
-      distances = diffs.sum(dim=-1)
+      probs_sum = (expanded_probs**2).sum(dim=-1) # batch_size * sequence_length
+      targets_sum = expanded_targets.sum(dim=-1)  # vocab_size
+
+      dot_products = probabilities_2d @ target_tensor_float.T  # (batch_size * sequence_length, vocab_size)
+
+      distances = (probs_sum + targets_sum  - 2 * dot_products)
+      
+      # diffs = (expanded_probs - expanded_targets) ** 2
+      # distances = diffs.sum(dim=-1)
 
       neg_distances = -distances
       top_k_indices = torch.topk(neg_distances, k=top_k, dim=1).indices

@@ -26,6 +26,7 @@ def initialize_wandb(model_config, run_name):
             "learning_rate": model_config["lr"],
             "block_size": model_config["block_size"],
             "vocab_size": model_config["vocab_size"],
+            "r": model_config["r"]
         }
     )
 
@@ -74,7 +75,7 @@ def main():
     model = model.to(device)
     optim = torch.optim.Adam(model.parameters(), lr=model_config["lr"])
 
-    run_name = f"{config['wandb']['prefix']}-ecoc-{args.ecoc_type}-training-{args.model_config}-vocab-{model_config['vocab_size']}-epochs-{model_config['epochs']}"
+    run_name = f"{config['wandb']['prefix']}-ecoc-{args.ecoc_type}-training-{args.model_config}-vocab-{model_config['vocab_size']}-random-{model_config['r']}-epochs-{model_config['epochs']}"
 
     wandb_run = initialize_wandb(model_config, run_name)
 
