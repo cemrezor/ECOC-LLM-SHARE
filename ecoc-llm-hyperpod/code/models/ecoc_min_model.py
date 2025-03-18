@@ -69,21 +69,31 @@ class MinimalEcocGPT2(GPT2Base):
       probabilities_2d = probabilities.view(batch_size * sequence_length, ecoc_bits).float()
       
       target_tensor_float = self.ecoc_target_tensor.float()
-      expanded_probs = probabilities_2d.unsqueeze(1)
-      expanded_targets = target_tensor_float.unsqueeze(0)
+      # expanded_probs = probabilities_2d.unsqueeze(1)
+      # expanded_targets = target_tensor_float.unsqueeze(0)
+      probabilities_convert = probabilities_2d.clone()
+      probabilities_convert[probabilities_convert==0]=-1
+      target_convert = target_tensor_float.clone()
+      target_convert[target_convert==0] =-1
 
-      probs_sum = (expanded_probs**2).sum(dim=-1) # batch_size * sequence_length
-      targets_sum = expanded_targets.sum(dim=-1)  # vocab_size
+      # probs_sum = (expanded_probs**2).sum(dim=-1) # batch_size * sequence_length
+      # targets_sum = expanded_targets.sum(dim=-1)  # vocab_size
+      norm_prob = F.normalize(probabilities_convert)
+      norm_target = F.normalize(target_convert)
 
-      dot_products = probabilities_2d @ target_tensor_float.T  # (batch_size * sequence_length, vocab_size)
+      # dot_products = probabilities_2d @ target_tensor_float.T  # (batch_size * sequence_length, vocab_size)
 
-      distances = (probs_sum + targets_sum  - 2 * dot_products)
+      dot_products = probabilities_convert @ target_convert.T  # (batch_size * sequence_length, vocab_size)
+
+      similarity = dot_products/(norm_prob @ norm_target.T)
       
+      # distances = (probs_sum + targets_sum  - 2 * dot_products)
+
       # diffs = (expanded_probs - expanded_targets) ** 2
       # distances = diffs.sum(dim=-1)
 
-      neg_distances = -distances
-      top_k_indices = torch.topk(neg_distances, k=top_k, dim=1).indices
+      # neg_distances = -distances
+      top_k_indices = torch.topk(similarity, k=top_k, dim=1).indices
 
       top_k_tokens = top_k_indices.view(batch_size, sequence_length, top_k)
 
@@ -100,6 +110,7 @@ class MinimalEcocGPT2(GPT2Base):
       for j in range(seq_length):
         vec = targets[i, j] 
         exact_matches = (self.ecoc_target_tensor == vec).all(dim=1)
+
         if exact_matches.any():
           token_id = torch.nonzero(exact_matches, as_tuple=True)[0].item()
           tokens[i, j] = token_id

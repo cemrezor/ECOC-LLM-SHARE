@@ -77,7 +77,7 @@ def main():
 
     run_name = f"{config['wandb']['prefix']}-ecoc-{args.ecoc_type}-training-{args.model_config}-vocab-{model_config['vocab_size']}-random-{model_config['r']}-epochs-{model_config['epochs']}"
 
-    wandb_run = initialize_wandb(model_config, run_name)
+    # wandb_run = initialize_wandb(model_config, run_name)
 
     trainer = Trainer(
         model_config=model_config,
@@ -86,7 +86,7 @@ def main():
         train_data=train_data,
         val_data=val_data,
         encoder=tokenizer.encoder,
-        wandb_run=wandb_run,
+        # wandb_run=wandb_run,
         device=device
     )
 

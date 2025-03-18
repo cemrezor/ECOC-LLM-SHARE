@@ -24,12 +24,12 @@ configdict= {
         "n_head": 16,
         "n_embed": 320,
         "dropout": 0.2,
-        "epochs": 2,
+        "epochs": 1,
         "eval_interval": 200,
         "eval_steps": 50,
         "n": 1200000,
-        "vocab_size": 3000, 
-        "r": 38
+        "vocab_size": 1000, 
+        "r": 40
     },
     "gpt-30M": {
         "batch_size": 64,
@@ -61,7 +61,7 @@ configdict= {
         "prefix" : "yu"
     },
     "checkpoints" : {
-        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints"
+        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/cosine"
     }
 }
 
