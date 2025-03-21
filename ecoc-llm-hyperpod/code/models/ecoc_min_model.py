@@ -71,28 +71,30 @@ class MinimalEcocGPT2(GPT2Base):
       target_tensor_float = self.ecoc_target_tensor.float()
       # expanded_probs = probabilities_2d.unsqueeze(1)
       # expanded_targets = target_tensor_float.unsqueeze(0)
-      probabilities_convert = probabilities_2d.clone()
-      probabilities_convert[probabilities_convert==0]=-1
-      target_convert = target_tensor_float.clone()
-      target_convert[target_convert==0] =-1
+      # probabilities_convert = probabilities_2d.clone()
+      # probabilities_convert[probabilities_convert==0]=-1
+      # target_convert = target_tensor_float.clone()
+      # target_convert[target_convert==0] =-1
 
       # probs_sum = (expanded_probs**2).sum(dim=-1) # batch_size * sequence_length
       # targets_sum = expanded_targets.sum(dim=-1)  # vocab_size
-      norm_prob = F.normalize(probabilities_convert)
-      norm_target = F.normalize(target_convert)
+      norm_prob = F.normalize(probabilities_2d)
+      norm_target = F.normalize(target_tensor_float)
 
       # dot_products = probabilities_2d @ target_tensor_float.T  # (batch_size * sequence_length, vocab_size)
 
-      dot_products = probabilities_convert @ target_convert.T  # (batch_size * sequence_length, vocab_size)
+      # dot_products = probabilities_convert @ target_convert.T  # (batch_size * sequence_length, vocab_size)
 
-      similarity = dot_products/(norm_prob @ norm_target.T)
-      
+      # similarity = dot_products/(norm_prob @ norm_target.T)
+      similarity = norm_prob @ norm_target.T
+
       # distances = (probs_sum + targets_sum  - 2 * dot_products)
 
       # diffs = (expanded_probs - expanded_targets) ** 2
       # distances = diffs.sum(dim=-1)
 
       # neg_distances = -distances
+
       top_k_indices = torch.topk(similarity, k=top_k, dim=1).indices
 
       top_k_tokens = top_k_indices.view(batch_size, sequence_length, top_k)

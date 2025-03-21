@@ -13,7 +13,7 @@ configdict= {
         "eval_steps": 50,
         "n": 1200000,
         "vocab_size": 8000, 
-        "r": 38
+        "r": 40
     },
     "gpt-15M":{
         "batch_size": 64,
