@@ -2,7 +2,6 @@ import torch
 from datasets import load_dataset, load_from_disk
 import re
 from torch.utils.data import DataLoader
-from model import GPT2
 import sys
 import logging
 
@@ -13,19 +12,19 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def load_model(config, path, device='cpu'):
-    logger.info("Loading model from %s", path)
-    try:
-        model = GPT2(config, device=device)
-        model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
-        model.to(device)
-        model.eval()
-        logger.info("Model loaded successfully.", model)
+# def load_model(config, path, device='cpu'):
+#     logger.info("Loading model from %s", path)
+#     try:
+#         model = GPT2(config, device=device)
+#         model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+#         model.to(device)
+#         model.eval()
+#         logger.info("Model loaded successfully.", model)
 
-        return model
-    except Exception as e:
-        logger.error("Failed to load the model: %s", str(e))
-        raise e
+#         return model
+#     except Exception as e:
+#         logger.error("Failed to load the model: %s", str(e))
+#         raise e
 
 
 def load_data(config, batch_size, n, device='cpu'):

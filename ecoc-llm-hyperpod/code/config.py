@@ -55,10 +55,10 @@ configdict= {
     "wandb" : {
         "project" : "Pretraining_ECOC_LLMs",
         "key" : "d455a123a84819882762052288c93faa4531c2ab",
-        "prefix" : "sha"
+        "prefix" : "sha-v2"
     },
     "checkpoints" : {
-        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints"
+        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/v2"
     }
 }
 

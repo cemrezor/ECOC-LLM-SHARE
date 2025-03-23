@@ -40,9 +40,9 @@ class MinimalEcocGPT2(GPT2Base):
     x = self.forward_gpt2_base(idx)  
     
     # # t = 0
-    # start_t0 = time.process_time()
+    start_t0 = time.process_time()
     logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
-    # print("Time taken between t=0 to t=1", time.process_time() - start_t0)
+    print("Time taken between t=0 to t=1", time.process_time() - start_t0)
     # t = 1 
 
     if targets is None:
@@ -53,9 +53,9 @@ class MinimalEcocGPT2(GPT2Base):
         shifted_targets = targets[:, 1:]
         aligned_targets = self.ecoc_target_tensor[shifted_targets].contiguous()
         # t = 2
-        #start_t2 = time.process_time()
+        start_t2 = time.process_time()
         loss = F.binary_cross_entropy_with_logits(logits, aligned_targets.float())
-        #print("Time taken between t=2 to t=3", time.process_time() - start_t2)
+        print("Time taken between t=2 to t=3", time.process_time() - start_t2)
         # t = 3
 
     return logits, aligned_targets, loss

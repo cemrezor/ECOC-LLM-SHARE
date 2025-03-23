@@ -7,21 +7,14 @@ from config import config
 from utils import load_data
 from trainer import Trainer
 from tokenizer import Tokenizer
-from model import GPT2
-
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s"
-)
+from models.ecoc_min_model import MinimalEcocGPT2
+from models.ecoc_ova_model import OvaECOCGPT2
+from models.softmax_model import SoftmaxGPT2
+from models.ecoc_ova_2fc_model import OvaMTLECOCGPT2
+import math
+import numpy as np
 
 logger = logging.getLogger(__name__)
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Train GPT model on TinyStories (or another dataset).")
-    parser.add_argument("--model-config", type=str, required=True, 
-                        help="Which config key to load (e.g. gpt-1M, gpt-15M, etc.)")
-    return parser.parse_args()
 
 def initialize_wandb(model_config, run_name):
     wandb.login(key=config["wandb"]["key"])
@@ -37,12 +30,50 @@ def initialize_wandb(model_config, run_name):
         }
     )
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train GPT model on TinyStories (or another dataset).")
+    parser.add_argument("--model-config", type=str, required=True, 
+                        help="Which config key to load (e.g. gpt-1M, gpt-15M, etc.)")
+    parser.add_argument("--ecoc-type", type=str, required=True, 
+                        help="Which ecoc model to run.", default="minimal")
+    return parser.parse_args()
+
+def get_model(ecoc_type, model_config, device):
+    if ecoc_type == "minimal":
+        model = MinimalEcocGPT2(model_config, device=device)
+    elif ecoc_type == "ova":
+        model = OvaECOCGPT2(model_config, device=device)
+    elif ecoc_type == "softmax":
+        model = SoftmaxGPT2(model_config, device=device)
+    elif ecoc_type == "ova_MTL":
+        model = OvaMTLECOCGPT2(model_config, device=device)
+    else:
+        raise ValueError(f"Invalid ECOC type: {ecoc_type}. Must be one of ['minimal', 'ova', 'softmax']")
+    return model
+
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    print(
+    f"trainable params: {trainable_params} || "
+    f"all params: {all_param} || "
+    f"trainable%: {100 * trainable_params / all_param}"
+)
+
 def main():
     args = parse_args()
     model_config = config[args.model_config]
     logger.info("Using Model Config: %s", model_config)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     logger.info("Using device: %s", device)
 
     train_data, val_data = load_data(
@@ -51,6 +82,7 @@ def main():
         n=model_config["n"],
         device=device
     )
+
     tokenizer = Tokenizer(
         config["tokenizer"],
         k=model_config["vocab_size"] - 1,
@@ -58,12 +90,21 @@ def main():
         device=device
     )
 
-    model = GPT2(model_config, device=device)
+    model = get_model(args.ecoc_type, model_config, device)
+             
     model = model.to(device)
+    # for param in model.parameters():
+    #     param.requires_grad = False  # Freeze all parameters
+
+    # for param in model.ecoc_head.parameters():
+    #     param.requires_grad = True  # Unfreeze only the LM head
+
+    print_trainable_parameters(model)
+
     optim = torch.optim.Adam(model.parameters(), lr=model_config["lr"])
 
-    run_name = f"{config['wandb']['prefix']}-training-{args.model_config}-vocab-{model_config['vocab_size']}-epochs-{model_config['epochs']}"
-    
+    run_name = f"{config['wandb']['prefix']}-ecoc-{args.ecoc_type}-training-{args.model_config}-vocab-{model_config['vocab_size']}-epochs-{model_config['epochs']}"
+
     wandb_run = initialize_wandb(model_config, run_name)
 
     trainer = Trainer(
@@ -79,7 +120,8 @@ def main():
 
     trainer.train(checkpoint_path=f"{config['checkpoints']['location']}", run_name=run_name)
 
-    logger.info("Training completed successfully.")
+    logger.info("ECOC Training completed successfully.")
+
 
 if __name__ == "__main__":
     main()
