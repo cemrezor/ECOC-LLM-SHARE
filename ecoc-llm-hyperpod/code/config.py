@@ -61,7 +61,7 @@ configdict= {
         "prefix" : "yu"
     },
     "checkpoints" : {
-        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/cosine"
+        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/manhattan"
     }
 }
 

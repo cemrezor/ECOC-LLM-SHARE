@@ -5,6 +5,7 @@ import json
 import numpy as np
 import time
 from models.gpt2_base import GPT2Base 
+from scipy.spatial.distance import cdist
 
 class MinimalEcocGPT2(GPT2Base):
   def __init__(self, config, device='cpu'):
@@ -78,24 +79,33 @@ class MinimalEcocGPT2(GPT2Base):
 
       # probs_sum = (expanded_probs**2).sum(dim=-1) # batch_size * sequence_length
       # targets_sum = expanded_targets.sum(dim=-1)  # vocab_size
-      norm_prob = F.normalize(probabilities_2d)
-      norm_target = F.normalize(target_tensor_float)
+      # norm_prob = F.normalize(probabilities_2d)
+      # norm_target = F.normalize(target_tensor_float)
 
       # dot_products = probabilities_2d @ target_tensor_float.T  # (batch_size * sequence_length, vocab_size)
 
       # dot_products = probabilities_convert @ target_convert.T  # (batch_size * sequence_length, vocab_size)
 
       # similarity = dot_products/(norm_prob @ norm_target.T)
-      similarity = norm_prob @ norm_target.T
+      # similarity = norm_prob @ norm_target.T
+
+      diff_matrix = torch.cdist(probabilities_2d, target_tensor_float, p=1)
+      # probabilities_2d_np = probabilities_2d.cpu().numpy()
+      # target_tensor_float_np = target_tensor_float.cpu().numpy()
+      # diff_matrix = cdist(probabilities_2d_np, target_tensor_float_np, metric='cityblock')
+      # diff_matrix_tensor = torch.from_numpy(diff_matrix).cuda()
+
+
+      # diff_matrix = cdist(probabilities_2d, target_tensor_float, metric='cityblock')
 
       # distances = (probs_sum + targets_sum  - 2 * dot_products)
 
       # diffs = (expanded_probs - expanded_targets) ** 2
       # distances = diffs.sum(dim=-1)
 
-      # neg_distances = -distances
+      neg_distances = -diff_matrix
 
-      top_k_indices = torch.topk(similarity, k=top_k, dim=1).indices
+      top_k_indices = torch.topk(neg_distances, k=top_k, dim=1).indices
 
       top_k_tokens = top_k_indices.view(batch_size, sequence_length, top_k)
 
