@@ -29,7 +29,7 @@ configdict= {
         "eval_steps": 50,
         "n": 1200000,
         "vocab_size": 1000, 
-        "r": 40
+        "r": 490
     },
     "gpt-30M": {
         "batch_size": 64,
