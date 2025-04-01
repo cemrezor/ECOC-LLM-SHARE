@@ -20,7 +20,7 @@ echo "Running on host: $(hostname)"
 source /fsx/ubuntu/ecoc-llm-env/miniconda3/bin/activate
 conda activate /fsx/ubuntu/ecoc-llm-env/python-venv
 
-cd /fsx/ubuntu/wyuhuang/shamika/ECOC-LLM/ecoc-llm-hyperpod/code/
+cd /fsx/ubuntu/wyuhuang/ECOC-LLM/ecoc-llm-hyperpod/code
 
 #pip install -r requirements.txt
 
@@ -28,4 +28,5 @@ cd /fsx/ubuntu/wyuhuang/shamika/ECOC-LLM/ecoc-llm-hyperpod/code/
 python start_training_ecoc.py --model-config gpt-15M --ecoc-type minimal
 
 echo "Job $SLURM_JOB_ID completed."
+
 
