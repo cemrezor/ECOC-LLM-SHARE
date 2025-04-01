@@ -66,4 +66,16 @@ class OvaECOCGPT2(GPT2Base):
     def ecoc_to_token_ids_3d(self, targets: torch.Tensor) -> torch.Tensor:
         token_ids = targets.argmax(dim=-1)
         return token_ids
+    
+    def generate(self, idx, max_tokens=20):
+        for _ in range(max_tokens):
+        
+            idx_cond = idx[:, -self.block_size:]  # shape => (B, <=block_size)
+            logits, _, _ = self(idx_cond)
+            last_logits = logits[:, -1:, :]
 
+            top1 = self.ecoc_logits_to_topk_tokens_3d(last_logits, top_k=1)
+            next_token = top1.squeeze(-1)
+            idx = torch.cat((idx, next_token), dim=1)
+
+        return idx

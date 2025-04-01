@@ -11,8 +11,11 @@ from models.ecoc_min_model import MinimalEcocGPT2
 from models.ecoc_ova_model import OvaECOCGPT2
 from models.softmax_model import SoftmaxGPT2
 from models.ecoc_ova_2fc_model import OvaMTLECOCGPT2
+from models.ecoc_min_2fc_model import MinimalEcocMTLGPT2
+from models.qwen_minimal_ecoc import Qwen2ForCausalLM
 import math
 import numpy as np
+from models.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +42,6 @@ def parse_args():
                         help="Which ecoc model to run.", default="minimal")
     return parser.parse_args()
 
-def get_model(ecoc_type, model_config, device):
-    if ecoc_type == "minimal":
-        model = MinimalEcocGPT2(model_config, device=device)
-    elif ecoc_type == "ova":
-        model = OvaECOCGPT2(model_config, device=device)
-    elif ecoc_type == "softmax":
-        model = SoftmaxGPT2(model_config, device=device)
-    elif ecoc_type == "ova_MTL":
-        model = OvaMTLECOCGPT2(model_config, device=device)
-    else:
-        raise ValueError(f"Invalid ECOC type: {ecoc_type}. Must be one of ['minimal', 'ova', 'softmax']")
-    return model
-
 def print_trainable_parameters(model):
     """
     Prints the number of trainable parameters in the model.
@@ -73,7 +63,7 @@ def main():
     model_config = config[args.model_config]
     logger.info("Using Model Config: %s", model_config)
 
-    device = 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logger.info("Using device: %s", device)
 
     train_data, val_data = load_data(
