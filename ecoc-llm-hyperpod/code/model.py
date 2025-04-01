@@ -92,7 +92,9 @@ class GPT2(nn.Module):
     x = self.dropout(x) # (B, T, C)
     x = self.blocks(x) # (B, T, C)
     x = self.ln_final(x) # (B, T, C)
+    # t = 0
     logits = self.lm_head(x)  # (B, T, vocab_size)
+    # t = 1
 
     if targets is None:
       loss = None
@@ -100,7 +102,9 @@ class GPT2(nn.Module):
     else:
       logits = logits[..., :-1, :].contiguous()
       aligned_targets = targets[..., 1:].contiguous()
+      # t = 2
       loss = F.cross_entropy(logits.view(-1, logits.size(-1)), aligned_targets.view(-1), ignore_index=50256)
+      # t = 3
     return logits, aligned_targets, loss 
 
   def generate(self, idx, max_tokens, temperature=1.0, top_k=None):
@@ -116,3 +120,16 @@ class GPT2(nn.Module):
       idx_next = torch.multinomial(probs, num_samples=1) # (B, 1)
       idx = torch.concat((idx, idx_next), dim=1) # (B, T+1)
     return idx
+
+  def next_token(self, idx, temperature=1.0, top_k: int = 1):
+    # idx is (B, T)
+    idx_cond = idx[:, -self.block_size:]
+    logits, _, _ = self(idx_cond) # (B, T, C)
+    logits = logits[:, -1, :]  / temperature # (B, C)
+
+    v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+    logits[logits < v[:, [-1]]] = -float('Inf')
+
+    probs = F.softmax(logits, dim=-1) # Softmax Independently for C dim
+    next_top_k_tokens = torch.multinomial(probs, num_samples=top_k) # (B, top_k)
+    return next_top_k_tokens

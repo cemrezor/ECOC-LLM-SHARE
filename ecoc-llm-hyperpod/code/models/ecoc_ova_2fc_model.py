@@ -16,15 +16,24 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-class OvaECOCGPT2(GPT2Base):
+class OvaMTLECOCGPT2(GPT2Base):
 
     def __init__(self, config, device='cpu'):
         super().__init__(config, device)
         self.ecoc_bits = config.vocab_size
         self.ecoc_target_tensor = self._create_ova_codebook(config.vocab_size).to(self.device)
-        self.ecoc_head = nn.Linear(config.n_embed, self.ecoc_bits)
+        # self.ecoc_head = nn.Linear(config.n_embed, self.ecoc_bits)
+        self.linear_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(config.n_embed, 2, bias=False),  # First linear layer
+                nn.ReLU(),  # Activation function
+                nn.Linear(2, 1, bias=False),  # Second linear layer for a single logit
+                nn.Sigmoid()  # Sigmoid to convert logits to probabilities (0 or 1)
+            )
+            for _ in range(self.ecoc_bits)
+        ])
         
-        self.logger.info(f"ECOC OVA model initialized with {self.ecoc_bits} bits")
+        self.logger.info(f"ECOC OVA MTL model initialized with {self.ecoc_bits} bits")
         
 
     def _create_ova_codebook(self, vocab_size: int) -> torch.Tensor:
@@ -37,7 +46,10 @@ class OvaECOCGPT2(GPT2Base):
         x = self.forward_gpt2_base(idx)
         # t = 0
         start_t0 = time.process_time()
-        logits = self.ecoc_head(x)
+        # logits = self.linear_heads(x)
+        # hidden_states = logits[0]
+        logits = torch.stack([head(x) for head in self.linear_heads]).squeeze(-1)
+        logits = logits.permute(1, 2, 0)  # Shape: [batch_size, seq_len, bit_size]
         print("Time taken between t=0 to t=1", time.process_time() - start_t0)
         # t = 1 
 
@@ -66,16 +78,3 @@ class OvaECOCGPT2(GPT2Base):
     def ecoc_to_token_ids_3d(self, targets: torch.Tensor) -> torch.Tensor:
         token_ids = targets.argmax(dim=-1)
         return token_ids
-    
-    def generate(self, idx, max_tokens=20):
-        for _ in range(max_tokens):
-        
-            idx_cond = idx[:, -self.block_size:]  # shape => (B, <=block_size)
-            logits, _, _ = self(idx_cond)
-            last_logits = logits[:, -1:, :]
-
-            top1 = self.ecoc_logits_to_topk_tokens_3d(last_logits, top_k=1)
-            next_token = top1.squeeze(-1)
-            idx = torch.cat((idx, next_token), dim=1)
-
-        return idx

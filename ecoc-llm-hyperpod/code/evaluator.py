@@ -6,7 +6,7 @@ def calculate_perplexity(avg_loss):
 
 def calculate_top_k_accuracy(logits, aligned_targets, model, k=5):
 
-    if hasattr(model, "ecoc_head"):
+    if hasattr(model, "ecoc_head") or hasattr(model, "linear_heads"):
         top_k_tokens = model.ecoc_logits_to_topk_tokens_3d(
             ecoc_logits=logits,
             top_k=k
@@ -24,6 +24,8 @@ def calculate_top_k_accuracy(logits, aligned_targets, model, k=5):
     else :    
         probabilities = torch.softmax(logits, dim=-1)
         top_k_preds = torch.topk(probabilities, k=k, dim=-1).indices
+        print(f"aligned_targets shape: {aligned_targets.shape}")
+        print(f"top_k_preds shape: {top_k_preds.shape}")
         correct_predictions = (aligned_targets.unsqueeze(-1) == top_k_preds).any(dim=-1)
         correct_per_batch = correct_predictions.sum().item()
         total_per_batch = aligned_targets.numel()

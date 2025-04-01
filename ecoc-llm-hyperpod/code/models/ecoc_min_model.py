@@ -11,7 +11,7 @@ class MinimalEcocGPT2(GPT2Base):
   def __init__(self, config, device='cpu'):
         super().__init__(config, device=device)
         
-        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size, config.r)
+        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size)
         
         self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
         
@@ -34,15 +34,16 @@ class MinimalEcocGPT2(GPT2Base):
         random_bits = np.random.randint(0, 2, (vocab_size, r))  
         binary_matrix = np.hstack((binary_matrix, random_bits))
     token_to_ecoc_map = {i: binary_matrix[i] for i in range(vocab_size)}
-    
+
     return token_to_ecoc_map, ecoc_bits 
 
   def forward(self, idx, targets=None):
     x = self.forward_gpt2_base(idx)  
     
     # # t = 0
-    # start_t0 = time.process_time()
+    start_t0 = time.process_time()
     logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
+    # print(logits.shape)
     # print("Time taken between t=0 to t=1", time.process_time() - start_t0)
     # t = 1 
 
@@ -50,13 +51,14 @@ class MinimalEcocGPT2(GPT2Base):
         aligned_targets = None
         loss = None
     else:
-        logits = logits[:, :-1, :] 
+        logits = logits[:, :-1, :]
+        # print("-1 operation", logits.shape)
         shifted_targets = targets[:, 1:]
         aligned_targets = self.ecoc_target_tensor[shifted_targets].contiguous()
         # t = 2
-        #start_t2 = time.process_time()
+        start_t2 = time.process_time()
         loss = F.binary_cross_entropy_with_logits(logits, aligned_targets.float())
-        #print("Time taken between t=2 to t=3", time.process_time() - start_t2)
+        # print("Time taken between t=2 to t=3", time.process_time() - start_t2)
         # t = 3
 
     return logits, aligned_targets, loss
@@ -130,21 +132,26 @@ class MinimalEcocGPT2(GPT2Base):
           raise ValueError("Non existing ecoc code !!!")
     return tokens
 
-  def generate(self, idx, max_tokens, temperature=1.0, top_k=None):
-      pass 
-      # for _ in range(max_tokens):
-      #   idx_cond = idx[:, -self.block_size:] 
-      #   logits, _, _ = self(idx_cond) 
+  def generate(self, idx, max_tokens=20):
+      """
+      expecting 'idx' as shape (B, T).
+      Typically, B=1 if you're doing single-sequence inference, but
+      the model's forward pass is defined for (batch_size, seq_len).
+      
+      Returns shape => (B, T + max_tokens).
+      """
+      for _ in range(max_tokens):
+          
+          idx_cond = idx[:, -self.block_size:]  # shape => (B, <= block_size)
+          logits, _, _ = self(idx_cond)
+          last_logits = logits[:, -1:, :]
+          
+          top1 = self.ecoc_logits_to_topk_tokens_3d(last_logits, top_k=1)
+          next_token = top1.squeeze(-1)
+          idx = torch.cat((idx, next_token), dim=1)
 
-      #   logits = logits[:, -1, :]
-      #   logits = logits / temperature  
+      return idx
 
-      #   if top_k is not None:
-      #         v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-      #         logits[logits < v[:, [-1]]] = -float("Inf")
+  
 
-      #   decoded_tokens = self.decode_ecoc_predictions(logits)
-      #   idx_next = decoded_tokens.unsqueeze(-1) 
 
-      #   idx = torch.cat((idx, idx_next), dim=1)   
-      # return idx

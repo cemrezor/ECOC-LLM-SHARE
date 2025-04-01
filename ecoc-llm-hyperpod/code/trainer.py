@@ -3,7 +3,7 @@ import logging
 import math
 import os
 import sys
-#import time
+import time
 from evaluator import *
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -110,17 +110,17 @@ class Trainer:
             self.optimizer.zero_grad(set_to_none=True)
             
             # t = 5
-            #start_t5 = time.process_time()
+            start_t5 = time.process_time()
             
             loss.backward()
             
-            # start_6 = time.process_time()
+            start_6 = time.process_time()
             
-            #print("Time taken between t=5 to t=6", start_6 - start_t5)
+            print("Time taken between t=5 to t=6", start_6 - start_t5)
             # t = 6
             self.optimizer.step()
             
-            #print("Time taken between t=6 to t=7", time.process_time() - start_t5)
+            print("Time taken between t=6 to t=7", time.process_time() - start_t5)
             # t = 7
 
             if self.scheduler:
@@ -159,13 +159,17 @@ class Trainer:
         model_save_path = f"{checkpoint_path}/{run_name}-epoch-{epoch}.bin"
         self.model.save(model_save_path)
         logger.info(f"Checkpoint saved at {model_save_path}")
+        return model_save_path
 
     def train(self, checkpoint_path, run_name):
+        last_checkpoint_path = None
         for epoch in range(1, self.model_config.epochs + 1):
             logger.info(f"Starting Epoch {epoch}/{self.model_config.epochs}")
             self.train_one_epoch(epoch)
 
-            self.save_checkpoint(checkpoint_path, run_name, epoch)
+            last_checkpoint_path = self.save_checkpoint(checkpoint_path, run_name, epoch)
 
         if self.wandb_run:
             self.wandb_run.finish()
+        
+        return last_checkpoint_path
