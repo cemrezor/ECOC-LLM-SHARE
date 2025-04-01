@@ -108,9 +108,11 @@ def main():
         device=device
     )
 
-    trainer.train(checkpoint_path=f"{config['checkpoints']['location']}", run_name=run_name)
+    checkpoint_path = trainer.train(checkpoint_path=f"{config['checkpoints']['location']}", run_name=run_name)
 
-    logger.info("ECOC Training completed successfully.")
+    logger.info(f"ECOC Training completed successfully. {checkpoint_path}")
+    
+    return checkpoint_path
 
 
 if __name__ == "__main__":
