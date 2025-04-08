@@ -11,7 +11,7 @@ class MinimalEcocGPT2(GPT2Base):
   def __init__(self, config, device='cpu'):
         super().__init__(config, device=device)
         
-        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size)
+        token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size, config.r)
         
         self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
         

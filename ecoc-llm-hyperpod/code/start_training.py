@@ -11,8 +11,8 @@ from models.ecoc_min_model import MinimalEcocGPT2
 from models.ecoc_ova_model import OvaECOCGPT2
 from models.softmax_model import SoftmaxGPT2
 from models.ecoc_ova_2fc_model import OvaMTLECOCGPT2
-from models.ecoc_min_2fc_model import MinimalEcocMTLGPT2
-from models.qwen_minimal_ecoc import Qwen2ForCausalLM
+# from models.ecoc_min_2fc_model import MinimalEcocMTLGPT2
+# from models.qwen_minimal_ecoc import Qwen2ForCausalLM
 import math
 import numpy as np
 from models.model_factory import get_model
@@ -30,6 +30,7 @@ def initialize_wandb(model_config, run_name):
             "learning_rate": model_config["lr"],
             "block_size": model_config["block_size"],
             "vocab_size": model_config["vocab_size"],
+            "r": model_config["r"]
         }
     )
 
@@ -93,7 +94,7 @@ def main():
 
     optim = torch.optim.Adam(model.parameters(), lr=model_config["lr"])
 
-    run_name = f"{config['wandb']['prefix']}-ecoc-{args.ecoc_type}-training-{args.model_config}-vocab-{model_config['vocab_size']}-epochs-{model_config['epochs']}"
+    run_name = f"{config['wandb']['prefix']}-ecoc-{args.ecoc_type}-training-{args.model_config}-vocab-{model_config['vocab_size']}-random-{model_config['r']}-epochs-{model_config['epochs']}"
 
     wandb_run = initialize_wandb(model_config, run_name)
 
