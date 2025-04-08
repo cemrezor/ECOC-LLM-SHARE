@@ -64,7 +64,7 @@ class Trainer:
 
                 steps += 1                
 
-                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, self.model, k=top_k, eos = False, encoded_entry = tokens)
+                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, self.model, k=top_k, eos = 'False', encoded_entry = tokens)
                 total_top_k_accuracy += batch_top_k_accuracy
                 total_batches += 1
 

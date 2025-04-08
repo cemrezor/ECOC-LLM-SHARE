@@ -6,7 +6,7 @@ from config import config
 def calculate_perplexity(avg_loss):
     return math.exp(avg_loss) if avg_loss < 100 else float('inf')
 
-def calculate_top_k_accuracy(logits, aligned_targets, model, k=5, eos=False, encoded_entry = None):
+def calculate_top_k_accuracy(logits, aligned_targets, model, k=5, eos='False', encoded_entry = None):
         
     if hasattr(model, "ecoc_head") or hasattr(model, "linear_heads"):
         top_k_tokens = model.ecoc_logits_to_topk_tokens_3d(
@@ -21,7 +21,7 @@ def calculate_top_k_accuracy(logits, aligned_targets, model, k=5, eos=False, enc
         correct_count = correct_mask.sum().item()
         total = batch_size * seq_length
 
-        if eos == True:
+        if eos == 'True':
             EOS_masker = gt_tokens.clone().detach()
             EOS_prev = encoded_entry[:, :-1]
             EOS_mask = (EOS_masker!=EOS)&(EOS_prev!=EOS)
@@ -37,13 +37,14 @@ def calculate_top_k_accuracy(logits, aligned_targets, model, k=5, eos=False, enc
 
 
     else :    
+        EOS = model.config.vocab_size-1
         probabilities = torch.softmax(logits, dim=-1)
         top_k_preds = torch.topk(probabilities, k=5, dim=-1).indices
-        print(f"aligned_targets shape: {aligned_targets.shape}")
-        print(f"top_k_preds shape: {top_k_preds.shape}")
+        # print(f"aligned_targets shape: {aligned_targets.shape}")
+        # print(f"top_k_preds shape: {top_k_preds.shape}")
         correct_predictions = (aligned_targets.unsqueeze(-1) == top_k_preds).any(dim=-1)
 
-        if eos == True:
+        if eos == 'True':
             EOS_masker = aligned_targets.clone().detach()
             EOS_pre = encoded_entry[:, :-1]            
             EOS_mask = (EOS_masker!=EOS)&(EOS_pre!=EOS)

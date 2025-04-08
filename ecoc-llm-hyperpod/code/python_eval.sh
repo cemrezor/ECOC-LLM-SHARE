@@ -1,0 +1,1 @@
+python eval.py --model_config gpt-15M --checkpoint_path /fsx/ubuntu/ecoc-llm-env/checkpoints/manhattan/sha-v2-ecoc-minimal-training-gpt-15M-vocab-1000-random-0-epochs-1-epoch-1.bin --data_path /fsx/ubuntu/ecoc-llm-env/data/validation --eos True

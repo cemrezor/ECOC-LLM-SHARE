@@ -28,11 +28,11 @@ model = GPT2Base(model_config, device=device)
 # checkpoint = torch.load('/fsx/ubuntu/ecoc-llm-env/checkpoints/manhattan/yu-ecoc-minimal-training-gpt-15M-vocab-1000-random-40-epochs-1-epoch-1.bin', map_location=torch.device('cpu'))
 checkpoint = torch.load('/fsx/ubuntu/hragarwl/ecoc-llm-env/checkpoints/sha-training-gpt-15M-vocab-1000-epochs-1-epoch-1.bin', map_location=torch.device('cpu'))
 
-model_state_dict = checkpoint['model_state_dict']
+# model_state_dict = checkpoint['model_state_dict']
 
-model.load_state_dict(model_state_dict)
+# model.load_state_dict(model_state_dict)
 
-# model.load_state_dict(checkpoint, strict=False)
+model.load_state_dict(checkpoint, strict=False)
 
 
 model.to(device)

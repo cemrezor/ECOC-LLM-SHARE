@@ -29,7 +29,7 @@ configdict= {
         "eval_steps": 50,
         "n": 1200000,
         "vocab_size": 1000, 
-        "r": 40
+        "r": 0
     },
     "gpt-30M": {
         "batch_size": 64,
@@ -44,7 +44,8 @@ configdict= {
         "eval_interval": 200,
         "eval_steps": 50,
         "n": 1200000,
-        "vocab_size": 3000
+        "vocab_size": 3000, 
+        "r": 0
     },
      "tokenizer":{
         "name": "EleutherAI/gpt-neo-125M",
@@ -57,7 +58,7 @@ configdict= {
     "wandb" : {
         "project" : "Pretraining_ECOC_LLMs",
         "key" : "d455a123a84819882762052288c93faa4531c2ab",
-        "prefix" : "sha-v2"
+        "prefix" : "yu-v2"
     },
     "checkpoints" : {
         "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/manhattan"
