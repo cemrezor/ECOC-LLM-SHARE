@@ -1,6 +1,7 @@
 from models.ecoc_min_model import MinimalEcocGPT2
 from models.ecoc_ova_model import OvaECOCGPT2
 from models.softmax_model import SoftmaxGPT2
+from models.ecoc_ova_random_model import OvaPlusRandomECOCGPT2
 #from models.ecoc_ova_2fc_model import OvaMTLECOCGPT2
 #from models.ecoc_min_2fc_model import MinimalEcocMTLGPT2
 #from models.qwen_minimal_ecoc import Qwen2ForCausalLM
@@ -12,6 +13,8 @@ def get_model(model_type, model_config, device):
         model = OvaECOCGPT2(model_config, device=device)
     elif model_type == "softmax":
         model = SoftmaxGPT2(model_config, device=device)
+    elif model_type == "ova_plus_random":
+        model = OvaPlusRandomECOCGPT2(model_config, device=device)
     # elif model_type == "ova_MTL":
     #     model = OvaMTLECOCGPT2(model_config, device=device)
     # elif model_type == "min_MTL":

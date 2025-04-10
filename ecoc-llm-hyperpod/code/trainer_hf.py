@@ -37,14 +37,18 @@ class Trainer:
                     break
                 tokens = self.encoder(
                     batch, 
-                    max_length=self.model_config["block_size"], 
+                    # max_length=self.model_config.block_size, 
                     padding="max_length", 
                     truncation=True
                 ).to(self.device)
                 
                 #logger.info("[TMP] tokens is : %s ", tokens)
 
-                logits, aligned_targets, loss = self.model(tokens, tokens)
+                # logits, aligned_targets, loss = self.model(tokens, tokens)
+                output = self.model(input_ids=tokens, labels=tokens)
+                logits = output.logits
+                aligned_targets = output.aligned_targets
+                loss = output.loss
 
                 # logger.info("[TMP] logits is : %s ", logits)
                 # logger.info(f"[TMP] logits.shape: {logits.shape}")
@@ -63,8 +67,7 @@ class Trainer:
                 #     logger.info(f"[TMP] Predicted Tokens:{decoded_tokens[i].tolist()}")
 
                 steps += 1                
-
-                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, self.model, k=top_k, eos = 'False', encoded_entry = tokens)
+                batch_top_k_accuracy = calculate_top_k_accuracy(logits, aligned_targets, self.model, k=top_k)
                 total_top_k_accuracy += batch_top_k_accuracy
                 total_batches += 1
 
@@ -91,8 +94,8 @@ class Trainer:
 
 
     def train_one_epoch(self, epoch, eval_interval=200, eval_steps=50):
-        eval_interval = self.model_config["eval_interval"]
-        eval_steps = self.model_config["eval_steps"]
+        eval_interval = self.model_config.eval_interval
+        eval_steps = self.model_config.eval_steps
         
         self.model.train()
         total_loss = 0
@@ -100,13 +103,14 @@ class Trainer:
 
         for batch in self.train_data:
             tokens = self.encoder(
-                batch, 
-                max_length=self.model_config["block_size"], 
+                batch,
+                max_length = 256, 
+                # max_length=self.model_config.block_size, 
                 padding="max_length", 
                 truncation=True
             ).to(self.device)
-        
-            _, _, loss = self.model(tokens, tokens)
+            output = self.model(input_ids=tokens, labels=tokens)
+            loss = output.loss
 
             self.optimizer.zero_grad(set_to_none=True)
             
@@ -117,11 +121,11 @@ class Trainer:
             
             start_6 = time.process_time()
             
-            print("Time taken between t=5 to t=6", start_6 - start_t5)
+            # print("Time taken between t=5 to t=6", start_6 - start_t5)
             # t = 6
             self.optimizer.step()
             
-            print("Time taken between t=6 to t=7", time.process_time() - start_t5)
+            # print("Time taken between t=6 to t=7", time.process_time() - start_t5)
             # t = 7
 
             if self.scheduler:
@@ -164,8 +168,8 @@ class Trainer:
 
     def train(self, checkpoint_path, run_name):
         last_checkpoint_path = None
-        for epoch in range(1, self.model_config["epochs"] + 1):
-            logger.info(f"Starting Epoch {epoch}/{self.model_config['epochs']}")
+        for epoch in range(1, self.model_config.epochs + 1):
+            logger.info(f"Starting Epoch {epoch}/{self.model_config.epochs}")
             self.train_one_epoch(epoch)
 
             last_checkpoint_path = self.save_checkpoint(checkpoint_path, run_name, epoch)

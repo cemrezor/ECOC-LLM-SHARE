@@ -3,8 +3,8 @@
 # Slurm job script for running the training script
 #
 #SBATCH --job-name=gpt-training         # Job name
-#SBATCH --output=/fsx/ubuntu/ecoc-llm-env/logs/train_%j.log           # Standard output and error log (%j expands to jobID)
-#SBATCH --error=/fsx/ubuntu/ecoc-llm-env/logs/train_%j.log            # Standard error log
+#SBATCH --output=/fsx/ubuntu/ecoc-llm-env/logs/train_ecoc_%j.log           # Standard output and error log (%j expands to jobID)
+#SBATCH --error=/fsx/ubuntu/ecoc-llm-env/logs/train_ecoc_%j.log            # Standard error log
 #SBATCH --time=24:00:00                  # Run time limit (hh:mm:ss)
 #SBATCH --ntasks=1                      # Number of tasks
 #SBATCH --cpus-per-task=4               # Number of CPU cores per task
@@ -25,7 +25,7 @@ cd /fsx/ubuntu/ecoc-llm-env/code
 #pip install -r requirements.txt
 
 # Run the training script
-python start_training.py --model-config gpt-30M
+python start_training.py --model-config gpt-30M --ecoc-type minimal
 
 echo "Job $SLURM_JOB_ID completed."
 
