@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 class OvaECOCGPT2(GPT2Base):
 
-    def __init__(self, config, device='cpu'):
-        super().__init__(config, device)
+    def __init__(self, config, device='cpu', time=False):
+        super().__init__(config, device, time=time)
         self.ecoc_bits = config.vocab_size
         self.ecoc_target_tensor = self._create_ova_codebook(config.vocab_size).to(self.device)
         self.ecoc_head = nn.Linear(config.n_embed, self.ecoc_bits)
-        
+        self.logger = logging.getLogger(__name__)
         self.logger.info(f"ECOC OVA model initialized with {self.ecoc_bits} bits")
         
 
@@ -38,7 +38,9 @@ class OvaECOCGPT2(GPT2Base):
         # t = 0
         start_t0 = time.process_time()
         logits = self.ecoc_head(x)
-        print("Time taken between t=0 to t=1", time.process_time() - start_t0)
+        if self.time==True:
+            self.logger.info("Time taken between t=0 to t=1", time.process_time() - start_t0)
+        # print("Time taken between t=0 to t=1", time.process_time() - start_t0)
         # t = 1 
 
         if targets is None:
@@ -52,7 +54,10 @@ class OvaECOCGPT2(GPT2Base):
             # t = 2
             start_t2 = time.process_time()
             loss = F.binary_cross_entropy_with_logits(logits, aligned_targets.float())
-            print("Time taken between t=2 to t=3", time.process_time() - start_t2)
+            if self.time==True:
+                self.logger.info("Time taken between t=2 to t=3", time.process_time() - start_t2)
+
+            # print("Time taken between t=2 to t=3", time.process_time() - start_t2)
             # t = 3
             
         return logits, aligned_targets, loss

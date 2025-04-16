@@ -75,10 +75,11 @@ class Block(nn.Module):
 
 
 class GPT2Base(nn.Module):
-    def __init__(self, config, device='cpu'):
+    def __init__(self, config, time, device='cpu'):
         super().__init__()
         self.config = config
         self.device = device
+        self.time=time
         self.block_size = config.block_size
         self.embedings = nn.Embedding(config.vocab_size, config.n_embed)
         self.position_embedings = nn.Embedding(config.max_pos_n_embed, config.n_embed)

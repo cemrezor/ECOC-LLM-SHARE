@@ -6,10 +6,15 @@ import numpy as np
 import time
 from models.gpt2_base import GPT2Base 
 from scipy.spatial.distance import cdist
+import logging
+import sys
+
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+logger = logging.getLogger(__name__)
 
 class MinimalEcocGPT2(GPT2Base):
-  def __init__(self, config, device='cpu'):
-        super().__init__(config, device=device)
+  def __init__(self, config, device='cpu', time=False):
+        super().__init__(config, device=device, time=time)
         
         token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size, config.r)
         
@@ -18,7 +23,7 @@ class MinimalEcocGPT2(GPT2Base):
         self.ecoc_target_tensor = torch.tensor(
             [token_to_ecoc_map[token] for token in range(config.vocab_size)], dtype=torch.float32
         ).to(self.device)
-
+        self.logger = logging.getLogger(__name__)
         self.logger.info(f"[Model] MinimalEcocGPT2 initialized with Ecoc bits: {ecoc_bits}")
 
 
@@ -44,7 +49,8 @@ class MinimalEcocGPT2(GPT2Base):
     start_t0 = time.process_time()
     logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
     # print(logits.shape)
-    # print("Time taken between t=0 to t=1", time.process_time() - start_t0)
+    if self.time==True:
+      self.logger.info("Time taken between t=0 to t=1: %f", time.process_time() - start_t0)
     # t = 1 
 
     if targets is None:
@@ -58,7 +64,8 @@ class MinimalEcocGPT2(GPT2Base):
         # t = 2
         start_t2 = time.process_time()
         loss = F.binary_cross_entropy_with_logits(logits, aligned_targets.float())
-        # print("Time taken between t=2 to t=3", time.process_time() - start_t2)
+        if self.time==True:
+          self.logger.info("Time taken between t=2 to t=3: %f", time.process_time() - start_t2)
         # t = 3
 
     return logits, aligned_targets, loss
@@ -151,7 +158,3 @@ class MinimalEcocGPT2(GPT2Base):
           idx = torch.cat((idx, next_token), dim=1)
 
       return idx
-
-  
-
-

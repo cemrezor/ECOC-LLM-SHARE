@@ -12,6 +12,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.cache_utils import Cache
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.processing_utils import Unpack
+import logging
 
 @dataclass
 class CausalLMOutputWithAlignedTargets(CausalLMOutputWithPast):
@@ -300,7 +301,7 @@ class MinimalEcocGPT2(GPT2Base):
         self.ecoc_target_tensor = torch.tensor(
             [token_to_ecoc_map[token] for token in range(config.vocab_size)], dtype=torch.float32
         ).to(self.device)
-
+        self.logger = logging.getLogger(__name__)
         self.logger.info(f"[Model] MinimalEcocGPT2 initialized with Ecoc bits: {ecoc_bits}")
 
 

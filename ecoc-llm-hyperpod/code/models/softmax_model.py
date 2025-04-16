@@ -5,12 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from models.gpt2_base import GPT2Base
 import time
+import logging
 
 class SoftmaxGPT2(GPT2Base):
-  def __init__(self, config, device='cpu'):
-    super().__init__(config, device=device)
+  def __init__(self, config, device='cpu', time=False):
+    super().__init__(config, device=device, time=time)
     self.lm_head = nn.Linear(config.n_embed, config.vocab_size)
-
+    self.logger = logging.getLogger(__name__)
     self.logger.info(f"Softmax model initialized.")
 
   def forward(self, idx, targets=None):
@@ -19,7 +20,9 @@ class SoftmaxGPT2(GPT2Base):
         # # t = 0
     start_t0 = time.process_time()
     logits = self.lm_head(x)  # (B, T, vocab_size)
-    print("Time taken between t=0 to t=1", time.process_time() - start_t0)
+    if self.time==True:
+      self.logger.info("Time taken between t=0 to t=1: %f", time.process_time() - start_t0)
+    # print("Time taken between t=0 to t=1", time.process_time() - start_t0)
     # t = 1 
 
     if targets is None:
@@ -31,7 +34,9 @@ class SoftmaxGPT2(GPT2Base):
       # t = 2
       start_t2 = time.process_time()
       loss = F.cross_entropy(logits.view(-1, logits.size(-1)), aligned_targets.view(-1), ignore_index=50256)
-      print("Time taken between t=2 to t=3", time.process_time() - start_t2)
+      if self.time==True:
+        self.logger.info("Time taken between t=2 to t=3", time.process_time() - start_t2)
+      # print("Time taken between t=2 to t=3", time.process_time() - start_t2)
       # t = 3
 
 
