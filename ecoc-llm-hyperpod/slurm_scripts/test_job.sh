@@ -24,3 +24,5 @@ nvidia-smi
 
 # Sleep for a few seconds to observe GPU usage
 sleep 120
+
+### This is the end of the file 2.
