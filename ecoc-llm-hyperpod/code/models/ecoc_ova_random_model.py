@@ -38,10 +38,10 @@ class OvaPlusRandomECOCGPT2(GPT2Base):
     OVA-based ECOC with an additional 'extra_bits' random bits for each token.
     total ecoc_bits = vocab_size + extra_bits
     """
-    def __init__(self, config, device='cpu'):
-        super().__init__(config, device=device)
+    def __init__(self, config, device='cpu', time=False):
+        super().__init__(config, device=device, time=time)
         
-        self.extra_bits = 0
+        self.extra_bits = config.extra_bits
         self.ecoc_bits = config.vocab_size + self.extra_bits
         
         self.ecoc_target_tensor = create_ova_plus_random_codebook(
@@ -51,7 +51,7 @@ class OvaPlusRandomECOCGPT2(GPT2Base):
         ).to(self.device)
 
         self.ecoc_head = nn.Linear(config.n_embed, self.ecoc_bits)
-
+        self.logger = logging.getLogger(__name__)
         self.logger.info(
             f"[OvaPlusRandomECOCGPT2] Initialized with {self.ecoc_bits} bits "
             f"({config.vocab_size} OVA + {self.extra_bits} random)."
@@ -66,7 +66,8 @@ class OvaPlusRandomECOCGPT2(GPT2Base):
         
         start_t0 = time.process_time()
         logits = self.ecoc_head(x)  # shape => (B, T, vocab_size + extra_bits)
-        self.logger.debug("Time for LM head: %.4f", (time.process_time() - start_t0))
+        if self.time==True:
+            self.logger.info("Time taken between t=0 to t=1", time.process_time() - start_t0)
 
         if targets is None:
             aligned_targets = None
@@ -81,7 +82,8 @@ class OvaPlusRandomECOCGPT2(GPT2Base):
             loss = F.binary_cross_entropy_with_logits(
                 logits, aligned_targets.float()
             )
-            self.logger.debug("Time BCE: %.4f", (time.process_time() - start_t2))
+            if self.time==True:
+                self.logger.info("Time taken between t=2 to t=3", time.process_time() - start_t2)
             
         return logits, aligned_targets, loss
 

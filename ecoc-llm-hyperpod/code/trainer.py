@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 class Trainer:
-    def __init__(self, model_config, model, optimizer, train_data, val_data, encoder, scheduler=None, wandb_run=None, device="cuda"):
+    def __init__(self, time, model_config, model, optimizer, train_data, val_data, encoder, scheduler=None, wandb_run=None, device="cuda"):
         self.model_config = model_config
         self.model = model.to(device)
         self.optimizer = optimizer
@@ -20,6 +20,9 @@ class Trainer:
         self.encoder = encoder
         self.device = device
         self.wandb_run = wandb_run
+        self.time = time
+        self.logger = logging.getLogger(__name__)
+
 
     def validate(self, step, eval_steps=50, top_k=5):
         self.model.eval()
@@ -116,12 +119,16 @@ class Trainer:
             loss.backward()
             
             start_6 = time.process_time()
-            
-            print("Time taken between t=5 to t=6", start_6 - start_t5)
+            if self.time==True:
+                logger.info("Time taken between t=5 to t=6: %f", start_6 - start_t5)
+                #self.logger.info("Time taken between t=5 to t=6", start_6 - start_t5)
+            # print("Time taken between t=5 to t=6", start_6 - start_t5)
             # t = 6
             self.optimizer.step()
-            
-            print("Time taken between t=6 to t=7", time.process_time() - start_t5)
+            if self.time==True:
+                logger.info("Time taken between t=6 to t=7: %f", time.process_time() - start_6)
+                #self.logger.info("Time taken between t=6 to t=7", time.process_time() - start_6)
+            # print("Time taken between t=6 to t=7", time.process_time() - start_t5)
             # t = 7
 
             if self.scheduler:

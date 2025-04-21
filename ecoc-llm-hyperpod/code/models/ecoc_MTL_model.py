@@ -12,19 +12,35 @@ import sys
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-class MinimalEcocGPT2(GPT2Base):
+class MinimalMTLEcocGPT2(GPT2Base):
   def __init__(self, config, device='cpu', time=False):
         super().__init__(config, device=device, time=time)
         
         token_to_ecoc_map, ecoc_bits = self._generate_ecoc_codewords(config.vocab_size, config.r)
         
-        self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
-        
+        # self.ecoc_head = nn.Linear(config.n_embed, ecoc_bits)
+        self.bit_size = ecoc_bits
+
+        self.linear_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(config.n_embed, 1, bias=False),
+                # nn.ReLU(),
+                nn.Linear(1, 1, bias=False),
+            )
+            for _ in range(self.bit_size)
+        ])
+        for head in self.linear_heads:
+          last_linear = head[1]  # second layer in Sequential
+          with torch.no_grad():
+              last_linear.weight.fill_(1.0)  # Identity weight
+          last_linear.weight.requires_grad = False  # Optional: freeze to avoid learning
+
+        self.logger.info(f"[Sanity Check] Final layer weights for ECOC head 0: {self.linear_heads[0][1].weight}")
         self.ecoc_target_tensor = torch.tensor(
             [token_to_ecoc_map[token] for token in range(config.vocab_size)], dtype=torch.float32
         ).to(self.device)
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"[Model] MinimalEcocGPT2 initialized with Ecoc bits: {ecoc_bits}")
+        self.logger.info(f"[Model] MinimalMTLEcocGPT2 initialized with Ecoc bits: {ecoc_bits}")
 
 
   def _generate_ecoc_codewords(self, vocab_size, r=0, seed=42):
@@ -47,7 +63,10 @@ class MinimalEcocGPT2(GPT2Base):
     
     # # t = 0
     start_t0 = time.process_time()
-    logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
+    # logits = self.ecoc_head(x)  # (B, T, ecoc_bits)
+    logits = torch.stack([head(x) for head in self.linear_heads]).squeeze(-1)
+    logits = logits.permute(1, 2, 0)  # [B, T, bit_size]
+
     # print(logits.shape)
     if self.time==True:
       self.logger.info("Time taken between t=0 to t=1: %f", time.process_time() - start_t0)

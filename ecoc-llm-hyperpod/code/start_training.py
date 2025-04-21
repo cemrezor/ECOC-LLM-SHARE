@@ -41,6 +41,8 @@ def parse_args():
                         help="Which config key to load (e.g. gpt-1M, gpt-15M, etc.)")
     parser.add_argument("--ecoc-type", type=str, required=True, 
                         help="Which ecoc model to run.", default="minimal")
+    parser.add_argument("--time-check", type=bool, required=True, 
+                        help="Measure times for different steps.", default=False)
     return parser.parse_args()
 
 def print_trainable_parameters(model):
@@ -64,7 +66,13 @@ def main():
     model_config = config[args.model_config]
     logger.info("Using Model Config: %s", model_config)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if args.time_check==False:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        logger.info("Using GPU for training.")
+    elif args.time_check==True:
+        device = 'cpu'
+        logger.info("Time check mode: Using CPU for training.")
+
     logger.info("Using device: %s", device)
 
     train_data, val_data = load_data(
@@ -81,7 +89,7 @@ def main():
         device=device
     )
 
-    model = get_model(args.ecoc_type, model_config, device)
+    model = get_model(args.ecoc_type, model_config, device, args.time_check)
              
     model = model.to(device)
     # for param in model.parameters():
@@ -101,6 +109,7 @@ def main():
     trainer = Trainer(
         model_config=model_config,
         model=model,
+        time=args.time_check,
         optimizer=optim,
         train_data=train_data,
         val_data=val_data,
