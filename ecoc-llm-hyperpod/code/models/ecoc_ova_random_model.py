@@ -41,7 +41,7 @@ class OvaPlusRandomECOCGPT2(GPT2Base):
     def __init__(self, config, device='cpu'):
         super().__init__(config, device=device)
         
-        self.extra_bits = 500
+        self.extra_bits = 0
         self.ecoc_bits = config.vocab_size + self.extra_bits
         
         self.ecoc_target_tensor = create_ova_plus_random_codebook(
