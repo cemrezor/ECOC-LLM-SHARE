@@ -95,10 +95,10 @@ configdict= {
     "wandb" : {
         "project" : "Pretraining_ECOC_LLMs",
         "key" : "d455a123a84819882762052288c93faa4531c2ab",
-        "prefix" : "yu-v2"
+        "prefix" : "cz"
     },
     "checkpoints" : {
-        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/manhattan"
+        "location" : "/fsx/ubuntu/ecoc-llm-env/checkpoints/czreproduce"
     }
 }
 
