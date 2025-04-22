@@ -9,14 +9,14 @@ from models.qwen_minimal_ecoc import Qwen2ForCausalLM
 def get_model(model_type, model_config, device, time):
     if model_type == "minimal":
         model = MinimalEcocGPT2(model_config, device=device, time=time)
-    elif model_type == "ova":
-        model = OvaECOCGPT2(model_config, device=device, time=time)
+    #elif model_type == "ova_optimized":
+    #    model = OvaECOCGPT2(model_config, device=device, time=time)
     elif model_type == "softmax":
         model = SoftmaxGPT2(model_config, device=device, time=time)
-    elif model_type == "ova_plus_random":
+    elif model_type == "ova":
         model = OvaPlusRandomECOCGPT2(model_config, device=device, time=time)
-    # elif model_type == "ova_MTL":
-    #     model = OvaMTLECOCGPT2(model_config, device=device)
+    elif model_type == "ova_MTL":
+         model = OvaMTLECOCGPT2(model_config, device=device)
     # elif model_type == "min_MTL":
     #     model = MinimalEcocMTLGPT2(model_config, device=device)
     elif model_type == "minimal qwen":
